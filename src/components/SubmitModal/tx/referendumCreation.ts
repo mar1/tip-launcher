@@ -2,214 +2,157 @@ import { typedApi } from "@/chain";
 import { formatToken } from "@/lib/formatToken";
 import { MultiAddress } from "@polkadot-api/descriptors";
 import { createReferendaSdk } from "@polkadot-api/sdk-governance";
-import {
-  AccountId,
-  getMultisigAccountId,
-} from "@polkadot-api/substrate-bindings";
 import { state } from "@react-rxjs/core";
-import { CompatibilityLevel } from "polkadot-api";
+import { TOKEN_DECIMALS } from "@/constants";
 import {
   combineLatest,
   filter,
   map,
   merge,
   switchMap,
-  withLatestFrom,
 } from "rxjs";
 import {
   curatorDeposit$,
-  referendumExecutionBlocks$,
 } from "../../RfpForm/data";
-import { FormSchema } from "../../RfpForm/formSchema";
-import { selectedAccount$ } from "../../SelectAccount";
 import { dismissable, submittedFormData$ } from "../modalActions";
-import { getCreationMultisigCallMetadata, rfpBounty$ } from "./bountyCreation";
 import { createTxProcess } from "./txProcess";
 import { TxWithExplanation } from "./types";
 import { getTrack } from "@/components/RfpForm/data/referendaConstants";
 
 const referendaSdk = createReferendaSdk(typedApi);
 
-const accountCodec = AccountId();
-
-const getMultisigAddress = (formData: FormSchema) =>
-  accountCodec.dec(
-    getMultisigAccountId({
-      threshold: Math.min(
-        formData.signatoriesThreshold,
-        formData.supervisors.length
-      ),
-      signatories: formData.supervisors.map(accountCodec.enc),
-    })
-  );
-
 export const referendumCreationTx$ = state(
-  rfpBounty$.pipe(
-    withLatestFrom(
-      submittedFormData$.pipe(filter((v) => !!v)),
-      referendumExecutionBlocks$.pipe(filter((v) => !!v))
-    ),
-    switchMap(
-      ([{ bounty, multisigTimepoint }, formData, { bountyFunding }]) => {
-        const curatorAddr =
-          formData.supervisors.length === 1
-            ? formData.supervisors[0]
-            : getMultisigAddress(formData);
+  submittedFormData$.pipe(
+    filter((v) => !!v),
+    switchMap((formData) => {
+      const curatorAddr = formData.beneficiary;
 
-        const amount$ = combineLatest([
-          curatorDeposit$,
-          typedApi.query.System.Account.getValue(curatorAddr),
-        ]).pipe(map(([deposit, account]) => deposit - account.data.free));
+      const amount$ = combineLatest([
+        curatorDeposit$,
+        typedApi.query.System.Account.getValue(curatorAddr),
+      ]).pipe(map(([deposit, account]) => {
+        if (!account) return 0n;
+        return (deposit || 0n) - account.data.free;
+      }));
 
-        const getReferendumProposal = async (): Promise<TxWithExplanation> => {
-          if (
-            await typedApi.tx.Bounties.approve_bounty_with_curator.isCompatible(
-              CompatibilityLevel.Partial
-            )
-          ) {
-            return {
-              tx: typedApi.tx.Bounties.approve_bounty_with_curator({
-                bounty_id: bounty.id,
-                curator: MultiAddress.Id(curatorAddr),
-                fee: 0n,
-              }),
-              explanation: {
-                text: "Approve with curator",
-                params: {
-                  curator: curatorAddr,
-                },
-              },
-            };
-          }
+      const getReferendumProposal = async (): Promise<TxWithExplanation> => {
+        const prizePoolAmount = BigInt(Math.round(formData.prizePool * Math.pow(10, TOKEN_DECIMALS)));
 
-          const tx = typedApi.tx.Utility.batch({
-            calls: [
-              typedApi.tx.Bounties.approve_bounty({ bounty_id: bounty.id })
-                .decodedCall,
-              typedApi.tx.Scheduler.schedule({
-                when: bountyFunding,
-                priority: 255,
-                call: typedApi.tx.Bounties.propose_curator({
-                  bounty_id: bounty.id,
-                  curator: MultiAddress.Id(curatorAddr),
-                  fee: 0n,
-                }).decodedCall,
-                maybe_periodic: undefined,
-              }).decodedCall,
-            ],
-          });
-          return {
-            tx,
-            explanation: {
-              text: "batch",
-              params: {
-                0: {
-                  text: "Approve bounty",
-                },
-                1: {
-                  text: "Schedule",
-                  params: {
-                    when: "After bounty funding",
-                    call: {
-                      text: "Propose curator",
-                      params: {
-                        curator: curatorAddr,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          };
+        // The native asset is the asset at location {"parents":0,"interior":"Here"}
+        const NATIVE_ASSET_V3 = {
+          V3: {
+            id: { Concrete: { parents: 0, interior: { Here: null } } },
+            fun: { Fungible: 0n },
+          },
         };
 
-        const proposal = getReferendumProposal();
-        const proposalCallData = proposal.then((r) => r.tx.getEncodedData());
-        const proposalTxExplanation = proposal.then((r) => r.explanation);
+        const prizePoolCall = typedApi.tx.Treasury.spend({
+          amount: prizePoolAmount,
+          beneficiary: MultiAddress.Id(formData.beneficiary),
+          asset_kind: NATIVE_ASSET_V3,
+        });
 
-        return combineLatest([
-          proposalCallData,
-          proposalTxExplanation,
-          amount$,
-          selectedAccount$.pipe(filter((v) => !!v)),
-          getTrack(bounty.value),
-        ]).pipe(
-          map(
-            ([
-              proposal,
-              proposalExplanation,
-              amount,
-              selectedAccount,
-              track,
-            ]) => {
-              const calls: TxWithExplanation[] = [];
+        let finalCall = prizePoolCall;
+        let totalValue = prizePoolAmount;
 
-              if (multisigTimepoint) {
-                // First unlock the deposit, as it could prevent having enough funds for the following transactions.
-                const metadata = getCreationMultisigCallMetadata(
-                  formData,
-                  selectedAccount.address
-                );
-                if (metadata) {
-                  calls.push({
-                    tx: typedApi.tx.Multisig.cancel_as_multi({
-                      ...metadata,
-                      timepoint: multisigTimepoint,
-                    }),
-                    explanation: {
-                      text: "Unlock deposit from indexing curator multisig",
-                    },
-                  });
-                }
-              }
+        if (formData.findersFeePercent && formData.finder) {
+          const finderFeeAmount = (prizePoolAmount * BigInt(formData.findersFeePercent)) / 100n;
+          const finderFeeCall = typedApi.tx.Treasury.spend({
+            amount: finderFeeAmount,
+            beneficiary: MultiAddress.Id(formData.finder),
+            asset_kind: NATIVE_ASSET_V3,
+          });
+          finalCall = typedApi.tx.Utility.batch_all({
+            calls: [prizePoolCall.decodedCall, finderFeeCall.decodedCall],
+          });
+          totalValue += finderFeeAmount;
+        }
 
-              if (amount > 0) {
-                calls.push({
-                  tx: typedApi.tx.Balances.transfer_keep_alive({
-                    dest: MultiAddress.Id(curatorAddr),
-                    value: amount,
-                  }),
-                  explanation: {
-                    text: "Transfer balance to curator",
-                    params: {
-                      destination: curatorAddr,
-                      value: formatToken(amount),
-                    },
-                  },
-                });
-              }
+        // Use createSpenderReferenda instead of createReferenda
+        const spenderReferenda = await referendaSdk.createSpenderReferenda(
+          await finalCall.getEncodedData(),
+          totalValue
+        );
 
+        return {
+          tx: spenderReferenda,
+          explanation: {
+            text: "Treasury spend referendum",
+            params: {
+              beneficiary: formData.beneficiary,
+              amount: formatToken(prizePoolAmount),
+              finder: formData.finder || "None",
+              finderFee: formData.findersFeePercent ? `${formData.findersFeePercent}%` : "None",
+            },
+          },
+        };
+      };
+
+      const proposal = getReferendumProposal();
+      const proposalCallData = proposal.then((r) => r.tx.getEncodedData());
+      const proposalTxExplanation = proposal.then((r) => r.explanation);
+
+      return combineLatest([
+        proposalCallData,
+        proposalTxExplanation,
+        amount$,
+        getTrack(BigInt(Math.round(formData.prizePool * Math.pow(10, TOKEN_DECIMALS)))),
+      ]).pipe(
+        map(
+          ([
+            proposal,
+            proposalExplanation,
+            amount,
+            track,
+          ]) => {
+            const calls: TxWithExplanation[] = [];
+
+            if (amount > 0) {
               calls.push({
-                tx: referendaSdk.createReferenda(track.origin, proposal),
+                tx: typedApi.tx.Balances.transfer_keep_alive({
+                  dest: MultiAddress.Id(curatorAddr),
+                  value: amount,
+                }),
                 explanation: {
-                  text: "Create referendum",
+                  text: "Transfer balance to curator",
                   params: {
-                    track: formatTrackName(track.track.name),
-                    call: proposalExplanation,
+                    destination: curatorAddr,
+                    value: formatToken(amount),
                   },
                 },
               });
-
-              if (calls.length > 1) {
-                return {
-                  tx: typedApi.tx.Utility.batch_all({
-                    calls: calls.map((c) => c.tx.decodedCall),
-                  }),
-                  explanation: {
-                    text: "batch",
-                    params: Object.fromEntries(
-                      calls.map((v, i) => [i, v.explanation])
-                    ),
-                  },
-                };
-              }
-              return calls[0];
             }
-          ),
-          dismissable()
-        );
-      }
-    )
+
+            calls.push({
+              tx: referendaSdk.createReferenda(track.origin, proposal),
+              explanation: {
+                text: "Create referendum",
+                params: {
+                  track: formatTrackName(track.track.name),
+                  call: proposalExplanation,
+                },
+              },
+            });
+
+            if (calls.length > 1) {
+              return {
+                tx: typedApi.tx.Utility.batch_all({
+                  calls: calls.map((c) => c.tx.decodedCall),
+                }),
+                explanation: {
+                  text: "batch",
+                  params: Object.fromEntries(
+                    calls.map((v, i) => [i, v.explanation])
+                  ),
+                },
+              };
+            }
+            return calls[0];
+          }
+        ),
+        dismissable()
+      );
+    })
   ),
   null
 );
@@ -220,37 +163,14 @@ export const [referendumCreationProcess$, submitReferendumCreation] =
   createTxProcess(referendumCreationTx$.pipe(map((v) => v?.tx ?? null)));
 
 export const rfpReferendum$ = state(
-  merge(
-    referendumCreationProcess$.pipe(
-      filter((v) => v?.type === "finalized" && v.ok),
-      switchMap(async (v) => {
-        const referendum = referendaSdk.getSubmittedReferendum(v);
-        if (!referendum) {
-          throw new Error("Submitted referendum could not be found");
-        }
-        return referendum;
-      })
-    ),
-    // try and load existing one if it's there
-    rfpBounty$.pipe(
-      switchMap(({ bounty }) => {
-        if (bounty.type !== "Proposed") return [];
-
-        return referendaSdk
-          .getReferenda()
-          .then((referenda) =>
-            bounty.filterApprovingReferenda(
-              referenda.filter((ref) => ref.type === "Ongoing")
-            )
-          );
-      }),
-      map((v) => v[0]?.referendum),
-      filter((v) => !!v),
-      map((v) => ({
-        index: v.id,
-        track: v.track,
-        proposal: v.proposal.rawValue,
-      }))
-    )
+  referendumCreationProcess$.pipe(
+    filter((v) => v?.type === "finalized" && v.ok),
+    switchMap(async (v) => {
+      const referendum = referendaSdk.getSubmittedReferendum(v);
+      if (!referendum) {
+        throw new Error("Submitted referendum could not be found");
+      }
+      return referendum;
+    })
   )
 );

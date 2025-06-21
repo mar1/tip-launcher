@@ -1,20 +1,16 @@
 "use client"
 
 import { TOKEN_SYMBOL } from "@/constants"
-import { formatDate } from "@/lib/date"
 import { formatCurrency, formatToken, formatUsd } from "@/lib/formatToken"
 import { getPublicKey, sliceMiddleAddr } from "@/lib/ss58"
 import { currencyRate$ } from "@/services/currencyRate"
 import { PolkadotIdenticon } from "@polkadot-api/react-components"
 import { useStateObservable } from "@react-rxjs/core"
-import { addDays, differenceInDays } from "date-fns"
 import {
   BadgeInfo,
   TriangleAlert,
   FileText,
-  RefreshCw,
   DollarSign,
-  Clock,
   Users,
   CheckCircle2,
   Copy,
@@ -23,15 +19,14 @@ import {
   ArrowLeftCircle,
 } from "lucide-react"
 import { type FC, useEffect, useState, useMemo, type Dispatch, type SetStateAction } from "react"
-import { useWatch, type UseFormSetValue } from "react-hook-form"
+import { useWatch } from "react-hook-form"
 import { combineLatest, map } from "rxjs"
 import { Checkbox } from "../ui/checkbox"
-import { DatePicker } from "../ui/datepicker"
-import { estimatedTimeline$, identity$ } from "./data"
+import { identity$ } from "./data"
 import { calculatePriceTotals, setBountyValue } from "./data/price"
 import { generateMarkdown } from "./data/markdown"
 import { MarkdownPreview } from "./MarkdownPreview"
-import { type Milestone, parseNumber, type RfpControlType, type FormSchema } from "./formSchema"
+import { parseNumber, type RfpControlType } from "./formSchema"
 import { selectedAccount$ } from "../SelectAccount"
 
 interface ReviewSectionProps {
@@ -41,8 +36,6 @@ interface ReviewSectionProps {
   hasSufficientBalance: boolean
   currentBalance: bigint | null
   totalRequiredCost: bigint | null
-  setValue: UseFormSetValue<FormSchema>
-  submissionDeadline: Date | null // Can be null if estimatedTimeline is null
   navigateToStep: (stepId: string) => void
 }
 
@@ -53,23 +46,13 @@ export const ReviewSection: FC<ReviewSectionProps> = ({
   hasSufficientBalance,
   currentBalance,
   totalRequiredCost,
-  setValue,
-  submissionDeadline,
   navigateToStep,
 }) => {
   const selectedAccount = useStateObservable(selectedAccount$)
 
-  const milestones = useWatch({ control, name: "milestones" })
-  const prizePool = useWatch({ control, name: "prizePool" })
-  const projectCompletion = useWatch({ control, name: "projectCompletion" })
-  const supervisors = useWatch({ control, name: "supervisors" })
+  const { beneficiary: tipBeneficiary, finder: referral } = useWatch({ control })
 
-  const milestonesTotal = getMilestonesTotal(milestones)
-  const milestonesMatchesPrize = parseNumber(prizePool) === milestonesTotal
-
-  const enoughDevDays =
-    projectCompletion && submissionDeadline ? differenceInDays(projectCompletion, submissionDeadline) >= 7 : true
-  const hasSupervisors = supervisors && supervisors.length > 0
+  const hasBeneficiaries = !!(tipBeneficiary && referral)
 
   return (
     <div className="poster-card">
@@ -90,47 +73,23 @@ export const ReviewSection: FC<ReviewSectionProps> = ({
         </div>
       )}
 
-      {/* Summary Grid - Three Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+      {/* Summary Grid - Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <FundingSummary
           control={control}
-          milestonesMatchesPrize={milestonesMatchesPrize}
           navigateToStep={navigateToStep}
         />
-        <TimelineSummary
+        <ProjectSummary
           control={control}
-          enoughDevDays={enoughDevDays}
-          submissionDeadline={submissionDeadline}
-          setValue={setValue}
+          hasBeneficiaries={hasBeneficiaries}
+          navigateToStep={navigateToStep}
         />
-        <ProjectSummary control={control} hasSupervisors={hasSupervisors} navigateToStep={navigateToStep} />
       </div>
 
       {/* Markdown Preview */}
       <ResultingMarkdown control={control} />
 
       {/* Final Confirmation */}
-      <div className="mt-8 bg-canvas-cream border border-pine-shadow-20 rounded-lg p-6">
-        <div className="flex items-start space-x-3">
-          <Checkbox
-            id="return-funds"
-            checked={isReturnFundsAgreed}
-            onCheckedChange={(checked) => setIsReturnFundsAgreed(!!checked)}
-            className="mt-1 border-pine-shadow data-[state=checked]:bg-lilypad data-[state=checked]:text-canvas-cream"
-          />
-          <label htmlFor="return-funds" className="text-pine-shadow leading-tight cursor-pointer text-sm">
-            I agree that any unused funds will be returned to the Treasury.
-          </label>
-        </div>
-        {!isReturnFundsAgreed && (
-          <div className="mt-3 poster-alert alert-error">
-            <div className="flex items-center gap-2">
-              <TriangleAlert size={16} />
-              <div className="text-sm font-medium">You must agree to return unused funds to the Treasury.</div>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   )
 }
@@ -152,13 +111,11 @@ const FundingSummaryListItem: FC<{
 
 const FundingSummary: FC<{
   control: RfpControlType
-  milestonesMatchesPrize: boolean
   navigateToStep: (stepId: string) => void
-}> = ({ control, milestonesMatchesPrize, navigateToStep }) => {
+}> = ({ control, navigateToStep }) => {
   const formFields = useWatch({ control })
-  const milestonesTotal = getMilestonesTotal(formFields.milestones)
   const currencyRate = useStateObservable(currencyRate$)
-  const { totalAmountWithBuffer } = calculatePriceTotals(formFields, currencyRate)
+  const { totalAmountWithBuffer } = calculatePriceTotals(formFields)
 
   useEffect(() => {
     setBountyValue(totalAmountWithBuffer)
@@ -186,6 +143,11 @@ const FundingSummary: FC<{
     }
   }
 
+  // Calculate finder's fee amount from percentage
+  const prizePool = parseNumber(formFields.prizePool) || 0
+  const findersFeePercent = parseNumber(formFields.findersFeePercent) || 0
+  const findersFeeAmount = (prizePool * findersFeePercent) / 100
+
   return (
     <div className="bg-canvas-cream border border-lake-haze rounded-lg p-6">
       <h4 className="flex items-center gap-2 text-lg font-medium text-midnight-koi mb-4">
@@ -196,27 +158,7 @@ const FundingSummary: FC<{
       <div className="space-y-3">
         <FundingSummaryListItem label="Prize Pool" value={formatUsd(formFields.prizePool)} />
 
-        {(formFields.milestones ?? []).map((milestone, i) => (
-          <FundingSummaryListItem
-            key={i}
-            label={`Milestone #${i + 1}`}
-            value={formatUsd(milestone.amount)}
-            isSubItem
-            valueClass="text-pine-shadow"
-          />
-        ))}
-
-        <div
-          className={`flex justify-between items-baseline py-2 border-t border-pine-shadow-20 ${
-            milestonesMatchesPrize ? "text-lilypad" : "text-tomato-stamp"
-          }`}
-        >
-          <span className="text-sm font-medium">Milestone Sum</span>
-          <span className="font-medium tabular-nums">{formatUsd(milestonesTotal)}</span>
-        </div>
-
-        <FundingSummaryListItem label="Finder's Fee" value={formatUsd(formFields.findersFee)} />
-        <FundingSummaryListItem label="Supervisor's Fee" value={formatUsd(formFields.supervisorsFee)} />
+        <FundingSummaryListItem label="Finder's Fee" value={formatUsd(findersFeeAmount)} />
 
         {/* Enhanced Total + Buffer Section */}
         <div className="pt-4 mt-4 border-t-2 border-lake-haze">
@@ -236,166 +178,18 @@ const FundingSummary: FC<{
           1 {TOKEN_SYMBOL} = {formatCurrency(currencyRate, "USD")}
         </div>
       </div>
-
-      {!milestonesMatchesPrize && (
-        <div className="mt-4 flex items-center gap-2 text-tomato-stamp">
-          <TriangleAlert size={16} />
-          <span className="text-sm font-medium">Milestones must match prize pool.</span>
-          <button
-            type="button"
-            onClick={() => navigateToStep("scope")}
-            className="inline-flex items-center gap-1 underline text-tomato-stamp hover:text-midnight-koi text-sm font-medium"
-          >
-            <ArrowLeftCircle size={14} />
-            Fix
-          </button>
-        </div>
-      )}
     </div>
-  )
-}
-
-const TimelineSummary: FC<{
-  control: RfpControlType
-  enoughDevDays: boolean
-  submissionDeadline: Date | null
-  setValue: UseFormSetValue<FormSchema>
-}> = ({ control, enoughDevDays, submissionDeadline, setValue }) => {
-  const estimatedTimeline = useStateObservable(estimatedTimeline$)
-  const projectCompletion = useWatch({ name: "projectCompletion", control })
-
-  const devDays = submissionDeadline && projectCompletion && differenceInDays(projectCompletion, submissionDeadline)
-
-  const daysToLateSubmission = estimatedTimeline
-    ? differenceInDays(estimatedTimeline.referendumSubmissionDeadline, new Date())
-    : null
-  const lateSubmissionDiff = estimatedTimeline
-    ? differenceInDays(estimatedTimeline.lateBountyFunding, estimatedTimeline.bountyFunding)
-    : null
-
-  const devDaysValue = devDays != null ? Math.round(devDays) : null
-  const devDaysUnit = "days"
-
-  const minCompletionDate = submissionDeadline ? addDays(submissionDeadline, 7) : new Date()
-
-  return (
-    <div className="bg-canvas-cream border border-sun-bleach rounded-lg p-6">
-      <h4 className="flex items-center gap-2 text-lg font-medium text-midnight-koi mb-4">
-        <Clock size={20} className="text-sun-bleach" />
-        Timeline
-      </h4>
-
-      <div className="space-y-3">
-        <div className="grid grid-cols-[1fr,auto] gap-x-4 items-baseline">
-          <span className="text-sm text-pine-shadow">Referendum Executed</span>
-          <span className="text-xs text-midnight-koi font-mono tabular-nums text-right">
-            {formatDate(estimatedTimeline?.referendumDeadline)}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-[1fr,auto] gap-x-4 items-baseline py-2 bg-sun-bleach bg-opacity-10 px-3 -mx-3 rounded">
-          <span className="font-medium text-midnight-koi">RFP Funding</span>
-          <span className="font-medium text-midnight-koi text-xs font-mono tabular-nums text-right">
-            {formatDate(estimatedTimeline?.bountyFunding)}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-[1fr,auto] gap-x-4 items-baseline">
-          <span className="text-sm text-pine-shadow">Funds Expiry Deadline</span>
-          <span className="text-xs text-midnight-koi font-mono tabular-nums text-right">
-            {formatDate(submissionDeadline)}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-[1fr,auto] gap-x-4 items-baseline">
-          <span className="text-sm text-pine-shadow">Project Completion</span>
-          <span className="text-xs text-midnight-koi font-mono tabular-nums text-right">
-            {formatDate(projectCompletion)}
-          </span>
-        </div>
-
-        <div
-          className={`flex justify-between items-start pt-3 border-t border-pine-shadow-20 ${
-            enoughDevDays ? "text-lilypad" : "text-tomato-stamp"
-          }`}
-        >
-          <span className="text-base font-semibold text-midnight-koi pt-1">Development Time</span>
-          <div className="flex flex-col items-end">
-            <span className="text-xl font-bold text-midnight-koi tabular-nums">
-              {devDaysValue != null ? devDaysValue : "—"}
-            </span>
-            {devDaysValue != null && <span className="text-xs text-pine-shadow-60">{devDaysUnit}</span>}
-          </div>
-        </div>
-      </div>
-
-      {!enoughDevDays && (
-        <div className="mt-4 space-y-2">
-          <div className="flex items-center gap-2 text-tomato-stamp">
-            <TriangleAlert size={16} />
-            <span className="text-sm font-medium">Development time must be at least 7 days after funds expiry.</span>
-          </div>
-          <div className="pl-1">
-            <DatePicker
-              value={projectCompletion}
-              onChange={(date) => setValue("projectCompletion", date, { shouldValidate: true })}
-              disabled={(date) => date.getTime() < minCompletionDate.getTime()}
-            />
-            <p className="text-xs text-pine-shadow-60 mt-1">
-              Funding expiry is {submissionDeadline ? formatDate(submissionDeadline) : "N/A"}. Select a date on or after{" "}
-              {formatDate(minCompletionDate)}.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {enoughDevDays && devDays != null && daysToLateSubmission != null && daysToLateSubmission < 1 && (
-        <div className="mt-4 poster-alert alert-warning">
-          <div className="flex items-center gap-2 text-xs">
-            <TriangleAlert size={14} />
-            <div className="font-medium">
-              Late submission may delay funding by {Math.round(lateSubmissionDiff!)} days.
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-const SupervisorListItem: FC<{ address: string }> = ({ address }) => {
-  const supervisorIdentity = useStateObservable(identity$(address))
-
-  return (
-    <li className="flex items-center gap-2 py-1">
-      <PolkadotIdenticon size={20} publicKey={getPublicKey(address)} className="shrink-0" />
-      <div className="text-xs leading-tight overflow-hidden">
-        {supervisorIdentity ? (
-          <>
-            <span className="font-medium text-pine-shadow truncate block">
-              {supervisorIdentity.value}
-              {supervisorIdentity.verified && <CheckCircle size={12} className="inline ml-1 text-lilypad" />}
-            </span>
-            {!supervisorIdentity.verified && (
-              <span className="text-pine-shadow-60 font-mono block truncate">{sliceMiddleAddr(address)}</span>
-            )}
-          </>
-        ) : (
-          <span className="text-pine-shadow font-mono truncate block">{sliceMiddleAddr(address)}</span>
-        )}
-      </div>
-    </li>
   )
 }
 
 const ProjectSummary: FC<{
   control: RfpControlType
-  hasSupervisors: boolean
+  hasBeneficiaries: boolean
   navigateToStep: (stepId: string) => void
-}> = ({ control, hasSupervisors, navigateToStep }) => {
+}> = ({ control, hasBeneficiaries, navigateToStep }) => {
   const formFields = useWatch({ control })
-  const supervisors = formFields.supervisors || []
-  const milestones = formFields.milestones || []
+  const tipBeneficiary = formFields.beneficiary || ""
+  const referral = formFields.finder || ""
 
   return (
     <div className="bg-canvas-cream border border-lilypad rounded-lg p-6">
@@ -413,38 +207,26 @@ const ProjectSummary: FC<{
         </div>
 
         <div>
-          <div className="text-xs font-medium text-pine-shadow-60 uppercase tracking-wide mb-1">Supervisors</div>
+          <div className="text-xs font-medium text-pine-shadow-60 uppercase tracking-wide mb-1">Beneficiaries</div>
           <div className="text-sm text-pine-shadow">
-            {supervisors.length > 0 ? `${supervisors.length} supervisor${supervisors.length > 1 ? "s" : ""}` : "None"}
+            {hasBeneficiaries ? "2 beneficiaries configured" : "None"}
           </div>
-          {supervisors.length > 1 && (
-            <div className="text-xs text-pine-shadow-60 mb-1">Threshold: {formFields.signatoriesThreshold || 2}</div>
-          )}
-          {supervisors.length > 0 && (
+          {hasBeneficiaries && (
             <ul className="mt-1 space-y-0.5">
-              {supervisors.map((addr) => (
-                <SupervisorListItem key={addr} address={addr} />
-              ))}
+              <li>
+                <div className="text-xs text-pine-shadow-60 mb-1">Tip Beneficiary:</div>
+                <BeneficiaryListItem address={tipBeneficiary} />
+              </li>
+              <li>
+                <div className="text-xs text-pine-shadow-60 mb-1">Referral:</div>
+                <BeneficiaryListItem address={referral} />
+              </li>
             </ul>
           )}
         </div>
 
-        <div>
-          <div className="text-xs font-medium text-pine-shadow-60 uppercase tracking-wide mb-1">Milestones</div>
-          <div className="text-sm text-pine-shadow">
-            {milestones.length > 0 ? `${milestones.length} milestone${milestones.length > 1 ? "s" : ""}` : "None"}
-          </div>
-        </div>
-
-        <div>
-          <div className="text-xs font-medium text-pine-shadow-60 uppercase tracking-wide mb-1">Submission Window</div>
-          <div className="text-sm text-pine-shadow">
-            {formFields.fundsExpiry || 1} week{(formFields.fundsExpiry || 1) > 1 ? "s" : ""} after funding
-          </div>
-        </div>
-
         <div className="pt-3 border-t border-pine-shadow-20">
-          {hasSupervisors ? (
+          {hasBeneficiaries ? (
             <div className="flex items-center gap-2">
               <CheckCircle2 size={16} className="text-lilypad" />
               <span className="text-sm text-pine-shadow font-medium">Ready for Submission</span>
@@ -452,10 +234,10 @@ const ProjectSummary: FC<{
           ) : (
             <div className="flex items-center gap-2 text-tomato-stamp">
               <TriangleAlert size={16} />
-              <span className="text-sm font-medium">Supervisor Required.</span>
+              <span className="text-sm font-medium">Beneficiaries Required.</span>
               <button
                 type="button"
-                onClick={() => navigateToStep("supervisors")}
+                onClick={() => navigateToStep("beneficiaries")}
                 className="inline-flex items-center gap-1 underline text-tomato-stamp hover:text-midnight-koi text-sm font-medium"
               >
                 <ArrowLeftCircle size={14} />
@@ -469,61 +251,75 @@ const ProjectSummary: FC<{
   )
 }
 
-const getMilestonesTotal = (milestones: Partial<Milestone>[] | undefined) =>
-  (milestones ?? [])
-    .map((milestone) => parseNumber(milestone.amount))
-    .filter((v) => v != null)
-    .reduce((a, b) => a + b, 0)
+const BeneficiaryListItem: FC<{ address: string | undefined }> = ({ address }) => {
+  if (!address) return null
+
+  const identity = useStateObservable(identity$(address))
+
+  return (
+    <div className="flex items-center gap-2 text-sm text-pine-shadow">
+      <PolkadotIdenticon size={16} publicKey={getPublicKey(address)} />
+      {identity ? (
+        identity.verified ? (
+          <div className="flex items-center gap-1">
+            <span className="font-medium">{identity.value}</span>
+            <CheckCircle size={12} className="text-lilypad-dark" />
+          </div>
+        ) : (
+          <span className="font-medium">{identity.value}</span>
+        )
+      ) : (
+        <span className="font-mono text-xs">{sliceMiddleAddr(address)}</span>
+      )}
+    </div>
+  )
+}
 
 const ResultingMarkdown: FC<{
   control: RfpControlType
 }> = ({ control }) => {
-  const formFields = useWatch({ control })
-  const currencyRate = useStateObservable(currencyRate$)
-  const [copied, setCopied] = useState(false)
-  const [refreshKey, setRefreshKey] = useState(0)
-
   const [identities, setIdentities] = useState<Record<string, string | undefined>>({})
+  const formFields = useWatch({ control })
 
   useEffect(() => {
-    const supervisors = formFields.supervisors || []
-    if (supervisors.length === 0) {
+    const tipBeneficiary = formFields.beneficiary
+    const referral = formFields.finder
+    if (!tipBeneficiary && !referral) {
       setIdentities({})
       return
     }
 
+    const addresses = [tipBeneficiary, referral].filter(Boolean) as string[]
     const subscription = combineLatest(
-      Object.fromEntries(supervisors.map((addr) => [addr, identity$(addr).pipe(map((id) => id?.value))])),
+      Object.fromEntries(addresses.map((addr) => [addr, identity$(addr).pipe(map((id) => id?.value))])),
     ).subscribe((r) => setIdentities(r))
     return () => subscription.unsubscribe()
-  }, [formFields.supervisors])
+  }, [formFields.beneficiary, formFields.finder])
 
   const markdown = useMemo(() => {
-    const { totalAmountWithBuffer } = calculatePriceTotals(formFields, currencyRate)
+    const { totalAmountWithBuffer } = calculatePriceTotals(formFields)
     return generateMarkdown(formFields, totalAmountWithBuffer, identities)
-  }, [formFields, currencyRate, identities, refreshKey])
+  }, [formFields, identities])
 
   const copyToClipboard = async () => {
-    if (markdown) {
+    try {
+      await navigator.clipboard.writeText(markdown)
+      // Simple success feedback
+      console.log("Markdown copied to clipboard")
+    } catch (err) {
+      console.error("Failed to copy markdown:", err)
+      // Fallback copy method
+      const textArea = document.createElement("textarea")
+      textArea.value = markdown
+      document.body.appendChild(textArea)
+      textArea.select()
       try {
-        await navigator.clipboard.writeText(markdown)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-      } catch (err) {
-        console.error("Failed to copy:", err)
-        const textArea = document.createElement("textarea")
-        textArea.value = markdown
-        document.body.appendChild(textArea)
-        textArea.select()
-        try {
-          document.execCommand("copy")
-          setCopied(true)
-          setTimeout(() => setCopied(false), 2000)
-        } catch (execErr) {
-          console.error("Fallback copy failed:", execErr)
-        }
-        document.body.removeChild(textArea)
+        document.execCommand("copy")
+        console.log("Markdown copied to clipboard (fallback)")
+      } catch (execErr) {
+        console.error("Fallback copy failed:", execErr)
       }
+      document.body.removeChild(textArea)
     }
   }
 
@@ -532,24 +328,16 @@ const ResultingMarkdown: FC<{
       <div className="flex items-center justify-between mb-4">
         <h4 className="flex items-center gap-2 text-lg font-medium text-midnight-koi">
           <FileText size={20} className="text-tomato-stamp" />
-          RFP Body Preview
+          Tip Request Body Preview
         </h4>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setRefreshKey((prev) => prev + 1)}
-            className="poster-btn btn-secondary flex items-center gap-1 text-xs py-2 px-3"
-          >
-            <RefreshCw size={14} />
-            Refresh
-          </button>
           <button
             type="button"
             onClick={copyToClipboard}
             className="poster-btn btn-primary flex items-center gap-1 text-xs py-2 px-3"
           >
             <Copy size={14} />
-            {copied ? "Copied!" : "Copy"}
+            Copy
           </button>
         </div>
       </div>

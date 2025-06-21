@@ -10,6 +10,9 @@ export const FormInputField = <T extends FieldValues>({
   description,
   type,
   min,
+  max,
+  step,
+  disabled,
 }: {
   control: Control<T>
   name: Path<T>
@@ -17,6 +20,9 @@ export const FormInputField = <T extends FieldValues>({
   description?: string
   type?: HTMLInputTypeAttribute
   min?: number | string | undefined
+  max?: number | string | undefined
+  step?: number | string | undefined
+  disabled?: boolean
 }) => (
   <FormField
     control={control}
@@ -28,6 +34,9 @@ export const FormInputField = <T extends FieldValues>({
           <Input
             type={type}
             min={min}
+            max={max}
+            step={step}
+            disabled={disabled}
             placeholder="enter value"
             className="poster-input"
             onWheel={type === "number" ? (evt) => evt.currentTarget.blur() : undefined}

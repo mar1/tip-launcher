@@ -13,10 +13,10 @@ import { StepBroadcastingTx } from "./StepBroadcastingTx"
 import { StepFinish } from "./StepFinish"
 import { StepSubmitTx } from "./StepSubmitTx"
 import { activeTxStep$, referendumIndex$ } from "./submit.state"
-import { submitBountyCreation } from "./tx/bountyCreation"
 import { submitdecisionDeposit } from "./tx/decisionDeposit"
 import { submitReferendumCreation } from "./tx/referendumCreation"
-import { estimatedCost$, signerBalance$ } from "@/components/RfpForm/data"
+import { signerBalance$ } from "@/components/RfpForm/data"
+import { estimatedCost$ } from "@/components/RfpForm/data"
 import { formatToken } from "@/lib/formatToken"
 import { AlertCircle } from "lucide-react"
 import { Button } from "../ui/button"
@@ -30,10 +30,10 @@ type ModalView =
   | { type: "prompt_account" }
   | { type: "checking_balance" }
   | {
-      type: "insufficient_balance_error"
-      required: bigint
-      available: bigint
-    }
+    type: "insufficient_balance_error"
+    required: bigint
+    available: bigint
+  }
   | { type: "transaction_steps" }
 
 // This observable manages the modal's view state before transaction steps
@@ -229,7 +229,7 @@ export const SubmitModal = () => {
           <DialogHeader>
             <DialogTitle>Submit RFP</DialogTitle>
             <DialogDescription>
-              This is a three-step process: Create the bounty, submit the referendum, and place the decision deposit.
+              This is a two-step process: Submit the referendum and place the decision deposit.
             </DialogDescription>
           </DialogHeader>
           <SubmitModalContent /> {/* This contains the multi-step tx UI */}
@@ -250,24 +250,17 @@ const SubmitModalContent = () => {
 
   if (activeTxStep.type === "tx") {
     switch (activeTxStep.tag) {
-      case "bounty":
-        return (
-          <div className="space-y-2 overflow-hidden">
-            <h3 className="text-sm font-bold">1. Submit the transaction to create the bounty</h3>
-            <StepSubmitTx explanation={activeTxStep.value.explanation} submit={submitBountyCreation} />
-          </div>
-        )
       case "ref":
         return (
           <div className="space-y-2 overflow-hidden">
-            <h3 className="text-sm font-bold">2. Submit the transaction to create the referendum</h3>
+            <h3 className="text-sm font-bold">1. Submit the transaction to create the referendum</h3>
             <StepSubmitTx explanation={activeTxStep.value.explanation} submit={submitReferendumCreation} />
           </div>
         )
       case "decision":
         return (
           <div className="space-y-2 overflow-hidden">
-            <h3 className="text-sm font-bold">3. Place the decision deposit on the referendum to start it</h3>
+            <h3 className="text-sm font-bold">2. Place the decision deposit on the referendum to start it</h3>
             <StepSubmitTx explanation={activeTxStep.value.explanation} submit={submitdecisionDeposit} />
           </div>
         )

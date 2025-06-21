@@ -1,10 +1,10 @@
 "use client"
 
-import { formatToken } from "@/lib/formatToken"
+import { formatToken, formatUsd } from "@/lib/formatToken"
 import { useStateObservable } from "@react-rxjs/core"
-import { TriangleAlert, CheckCircle2 } from "lucide-react"
-import { type FC, useEffect } from "react"
-import { useWatch, type DeepPartialSkipArrayKey } from "react-hook-form"
+import { TriangleAlert, CheckCircle2, Info } from "lucide-react"
+import { type FC, useEffect, useMemo } from "react"
+import { useWatch, type DeepPartialSkipArrayKey, useFormContext } from "react-hook-form"
 import { openSelectAccount, selectedAccount$ } from "../SelectAccount"
 import { estimatedCost$, signerBalance$ } from "./data"
 import { calculatePriceTotals, setBountyValue } from "./data/price"
@@ -12,39 +12,105 @@ import { currencyRate$ } from "@/services/currencyRate"
 import { FormInputField } from "./FormInputField"
 import { type RfpControlType, type FormSchema, parseNumber } from "./formSchema"
 
-export const FundingSection: FC<{ control: RfpControlType }> = ({ control }) => (
-  <div className="poster-card">
-    <h3 className="text-3xl font-medium mb-8 text-midnight-koi">Funding</h3>
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-      <FormInputField
-        control={control}
-        name="prizePool"
-        label="Prize Pool (USD)"
-        description="amount awarded to implementors"
-        type="number"
-      />
-      <FormInputField
-        control={control}
-        name="findersFee"
-        label="Finder's Fee (USD)"
-        description="amount awarded to the referral"
-        type="number"
-      />
-      <FormInputField
-        control={control}
-        name="supervisorsFee"
-        label="Supervisors' Fee (USD)"
-        description="amount split amongst supervisors"
-        type="number"
-      />
+export const FundingSection: FC<{ control: RfpControlType }> = ({ control }) => {
+  const prizePool = useWatch({ control, name: "prizePool" })
+  const findersFeePercent = useWatch({ control, name: "findersFeePercent" })
+
+  // Calculate finder's fee amount from percentage
+  const findersFeeAmount = useMemo(() => {
+    const prizePoolAmount = parseNumber(prizePool) || 0
+    const feePercent = parseNumber(findersFeePercent) || 0
+    return (prizePoolAmount * feePercent) / 100
+  }, [prizePool, findersFeePercent])
+
+  return (
+    <div className="poster-card">
+      <h3 className="text-3xl font-medium mb-8 text-midnight-koi">Funding</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        <FormInputField
+          control={control}
+          name="prizePool"
+          label="Prize Pool (USD)"
+          description="amount awarded to implementors"
+          type="number"
+        />
+        <FormInputField
+          control={control}
+          name="findersFeePercent"
+          label="Finder's Fee (%)"
+          description="percentage of prize pool awarded to the referral"
+          type="number"
+          min={0}
+          max={100}
+          step={0.1}
+        />
+      </div>
+
+      {/* Finder's Fee Amount Display */}
+      {findersFeeAmount > 0 && (
+        <div className="mb-8 bg-canvas-cream border border-pine-shadow-20 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <Info size={20} className="text-pine-shadow-60" />
+            <div>
+              <span className="text-sm text-pine-shadow">Finder's Fee Amount: </span>
+              <span className="text-sm font-medium text-midnight-koi">
+                {formatUsd(findersFeeAmount)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <TipCategoryDisplay control={control} />
+      <BalanceCheck control={control} />
     </div>
-    <BalanceCheck control={control} />
-  </div>
-)
+  )
+}
+
+const TipCategoryDisplay: FC<{ control: RfpControlType }> = ({ control }) => {
+  const prizePool = useWatch({ control, name: "prizePool" })
+  const currencyRate = useStateObservable(currencyRate$)
+
+  const tipCategory = useMemo(() => {
+    const prizePoolAmount = parseNumber(prizePool) || 0
+
+    if (prizePoolAmount === 0 || !currencyRate) {
+      return null
+    }
+
+    const prizePoolKSM = prizePoolAmount / currencyRate
+
+    if (prizePoolKSM <= 8.25) {
+      return { category: "Small Tipper", color: "text-lilypad" }
+    } else if (prizePoolKSM <= 33.33) {
+      return { category: "Big Tipper", color: "text-sun-bleach" }
+    } else {
+      return { category: "Too big for a tip request", color: "text-tomato-stamp" }
+    }
+  }, [prizePool, currencyRate])
+
+  if (!tipCategory) {
+    return null
+  }
+
+  return (
+    <div className="mb-8 bg-canvas-cream border border-pine-shadow-20 rounded-lg p-4">
+      <div className="flex items-center gap-3">
+        <Info size={20} className="text-pine-shadow-60" />
+        <div>
+          <span className="text-sm text-pine-shadow">Tip Category: </span>
+          <span className={`text-sm font-medium ${tipCategory.color}`}>
+            {tipCategory.category}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const BalanceCheck: FC<{ control: RfpControlType }> = ({ control }) => {
   const prizePool = useWatch({ control, name: "prizePool" })
-  const findersFee = useWatch({ control, name: "findersFee" })
+  const findersFeePercent = useWatch({ control, name: "findersFeePercent" })
   const supervisorsFee = useWatch({ control, name: "supervisorsFee" })
 
   const currencyRate = useStateObservable(currencyRate$)
@@ -55,17 +121,16 @@ const BalanceCheck: FC<{ control: RfpControlType }> = ({ control }) => {
   useEffect(() => {
     const formValuesForTotals: DeepPartialSkipArrayKey<FormSchema> = {
       prizePool: parseNumber(prizePool) ?? undefined,
-      findersFee: parseNumber(findersFee) ?? undefined,
-      supervisorsFee: parseNumber(supervisorsFee) ?? undefined,
+      findersFeePercent: parseNumber(findersFeePercent) ?? undefined,
     }
-    const { totalAmountWithBuffer } = calculatePriceTotals(formValuesForTotals, currencyRate)
-    // Only set bounty value if there's a prize pool, otherwise estimatedCost might show a value based on 0 USD + buffer
+    const { totalAmountWithBuffer } = calculatePriceTotals(formValuesForTotals)
+    // Only set bounty value if there's a prize pool, otherwise estimatedCost might show a value based on 0 USD
     if ((parseNumber(prizePool) || 0) > 0) {
       setBountyValue(totalAmountWithBuffer)
     } else {
       setBountyValue(null) // Reset estimated cost if prize pool is cleared or zero
     }
-  }, [prizePool, findersFee, supervisorsFee, currencyRate])
+  }, [prizePool, findersFeePercent, currencyRate])
 
   const prizePoolAmount = parseNumber(prizePool) || 0
 

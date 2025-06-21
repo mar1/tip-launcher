@@ -3,7 +3,6 @@ import { createReferendaSdk } from "@polkadot-api/sdk-governance";
 import { state } from "@react-rxjs/core";
 import { TxEvent } from "polkadot-api";
 import { combineLatest, map, Observable } from "rxjs";
-import { bountyCreationProcess$, bountyCreationTx$ } from "./tx/bountyCreation";
 import {
   decisionDepositProcess$,
   decisionDepositTx$,
@@ -22,10 +21,10 @@ const txProcessState = (
   process$: Observable<
     | TxEvent
     | {
-        type: "error";
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        err: any;
-      }
+      type: "error";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      err: any;
+    }
     | null
   >,
   tag: string
@@ -57,19 +56,18 @@ const txProcessState = (
 
       return tx
         ? {
-            type: "tx" as const,
-            tag,
-            value: {
-              ...tx,
-            },
-          }
+          type: "tx" as const,
+          tag,
+          value: {
+            ...tx,
+          },
+        }
         : null;
     })
   );
 
 export const activeTxStep$ = state(
   combineLatest([
-    txProcessState(bountyCreationTx$, bountyCreationProcess$, "bounty"),
     txProcessState(referendumCreationTx$, referendumCreationProcess$, "ref"),
     txProcessState(decisionDepositTx$, decisionDepositProcess$, "decision"),
   ]).pipe(map((steps) => steps.reverse().reduce((a, b) => a || b, null))),

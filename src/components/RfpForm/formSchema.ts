@@ -1,23 +1,22 @@
 import type { Control } from "react-hook-form"
 import { z } from "zod"
 
+const requiredString = z.string().min(1, "This field is required")
+const optionalAddress = z.string().optional()
+
 export const formSchema = z.object({
-  prizePool: z.coerce.number().positive(),
-  findersFee: z.coerce.number(),
-  supervisorsFee: z.coerce.number(),
-  supervisors: z.array(z.string()).min(1),
-  signatoriesThreshold: z.coerce.number(),
-  fundsExpiry: z.coerce.number().positive(),
-  projectCompletion: z.date().optional(), // Changed to optional
-  projectTitle: z.string().nonempty(),
-  projectScope: z.string(),
-  milestones: z.array(
-    z.object({
-      title: z.string(),
-      description: z.string(),
-      amount: z.coerce.number(),
-    }),
-  ),
+  // Scope
+  projectTitle: requiredString,
+  projectScope: requiredString,
+
+  // Funding
+  prizePool: z.number().min(0, "Prize pool must be a positive number"),
+  findersFeePercent: z.number().min(0).max(100).optional(),
+  supervisorsFee: z.number().min(0).optional(),
+
+  // Beneficiaries
+  beneficiary: requiredString,
+  finder: optionalAddress,
 })
 
 export const parseNumber = (value: string | number | undefined) => {
@@ -32,7 +31,6 @@ export const parseNumber = (value: string | number | undefined) => {
 export const emptyNumeric = "" as unknown as number
 
 export type FormSchema = z.infer<typeof formSchema>
-export type Milestone = FormSchema["milestones"][number]
 
 export type RfpFormContext = unknown
 export type RfpControlType = Control<FormSchema, RfpFormContext, FormSchema>

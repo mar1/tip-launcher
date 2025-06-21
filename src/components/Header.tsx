@@ -14,7 +14,7 @@ export const Header = () => {
             className="h-14 w-auto"
           />
           <div className="poster-brand">
-            <h1 className="poster-brand-title">RFP Launcher</h1>
+            <h1 className="poster-brand-title">Tips Launcher</h1>
             <div className="poster-brand-subtitle">Proposal Toolkit</div>
           </div>
         </div>

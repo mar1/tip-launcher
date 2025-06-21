@@ -1,7 +1,11 @@
 import { REFERENDUM_PRICE_BUFFER, TOKEN_SYMBOL } from "@/constants"
-import { format } from "date-fns"
 import type { DeepPartialSkipArrayKey } from "react-hook-form"
-import { type FormSchema, parseNumber } from "../formSchema"
+import {
+  type FormSchema,
+  parseNumber,
+  type RfpControlType,
+  formSchema,
+} from "../formSchema"
 
 export function generateMarkdown(
   data: DeepPartialSkipArrayKey<FormSchema>,
@@ -16,59 +20,35 @@ export function generateMarkdown(
   // Extract values with fallbacks
   const projectTitle = data.projectTitle || "Untitled Project"
   const prizePool = parseNumber(data.prizePool) || 0
-  const findersFee = parseNumber(data.findersFee) || 0
+  const findersFeePercent = parseNumber(data.findersFeePercent) || 0
   const supervisorsFee = parseNumber(data.supervisorsFee) || 0
-  const supervisors = data.supervisors || []
-  const fundsExpiry = parseNumber(data.fundsExpiry) || 1
-  const projectCompletion = data.projectCompletion
+  const tipBeneficiary = data.beneficiary || ""
+  const referral = data.finder || ""
   const projectScope = data.projectScope || ""
-  const milestones = data.milestones || []
+
+  // Calculate finder's fee amount from percentage
+  const findersFeeAmount = (prizePool * findersFeePercent) / 100
 
   // Generate markdown even with partial data
   const markdown = `# ${projectTitle}
 
-Prize Pool: $${prizePool.toLocaleString()}  
-Finder's Fee: $${findersFee.toLocaleString()}  
-Supervisors: $${supervisorsFee.toLocaleString()}  
+Prize Pool: $${prizePool.toLocaleString()}
+Finder's Fee: $${findersFeeAmount.toLocaleString()} (${findersFeePercent}%)
+Supervisor's Fee: $${supervisorsFee.toLocaleString()}
 
-${
-  totalAmountWithBuffer ? Math.round(totalAmountWithBuffer).toLocaleString() : "TBD"
-} ${TOKEN_SYMBOL} Requested (Amount + ${REFERENDUM_PRICE_BUFFER * 100}%)
+${totalAmountWithBuffer ? Math.round(totalAmountWithBuffer).toLocaleString() : "TBD"
+    } ${TOKEN_SYMBOL} Requested (Amount + ${REFERENDUM_PRICE_BUFFER * 100}%)
 
-## Supervisors
+## Beneficiaries
 
-${supervisors.length > 0 ? supervisors.map((addr) => `- ${identities[addr] || addr}`).join("  \n") : "- TBD"}
+**Tip Beneficiary:** ${tipBeneficiary ? (identities[tipBeneficiary] || tipBeneficiary) : "TBD"}
+**Referral:** ${referral ? (identities[referral] || referral) : "TBD"}
 
-Excess or unused funds will be returned to the treasury by the supervisors (bounty curators).
-
-## Timeline
-
-${format(new Date(), "eeee, LLLL dd")} - Single-ref RFP + supervisors ✅  
-${fundsExpiry} Week${fundsExpiry !== 1 ? "s" : ""} after RFP funding - submission deadline  
-${projectCompletion ? format(projectCompletion, "eeee, LLLL dd") : "TBD"} - Project completion  
+Excess or unused funds will be returned to the treasury.
 
 ## Project Scope
 
 ${projectScope || "Project scope to be defined..."}
-
-## Milestones
-
-${
-  milestones.length > 0
-    ? milestones
-        .map((milestone, i) => {
-          const amount = parseNumber(milestone.amount) || 0
-          const title = milestone.title || `Milestone ${i + 1}`
-          const description = milestone.description || "Description to be added..."
-
-          return `### Milestone ${i + 1}, ${title}  
-$${amount.toLocaleString()} USD
-
-${description}`
-        })
-        .join("\n\n")
-    : "### Milestone 1, TBD  \n$0 USD\n\nMilestones to be defined..."
-}
 `
 
   console.log("Generated markdown:", markdown)

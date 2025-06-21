@@ -1,113 +1,68 @@
 import { typedApi } from "@/chain";
-import { REMARK_TEXT, TOKEN_DECIMALS } from "@/constants";
+import { TOKEN_DECIMALS } from "@/constants";
 import { sum } from "@/lib/math";
 import { MultiAddress } from "@polkadot-api/descriptors";
-import { createReferendaSdk } from "@polkadot-api/sdk-governance";
 import { state } from "@react-rxjs/core";
-import { Binary } from "polkadot-api";
-import { combineLatest, from, map, switchMap } from "rxjs";
+import { combineLatest, from, of, switchMap, map } from "rxjs";
 import { bountyValue$ } from "./price";
-import { decisionDeposit, submissionDeposit } from "./referendaConstants";
+import { decisionDeposit, referendaSdk, submissionDeposit } from "./referendaConstants";
 
-const TITLE_LENGTH = 100;
 const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 
-const bountyDeposit$ = combineLatest([
-  typedApi.constants.Bounties.BountyDepositBase(),
-  typedApi.constants.Bounties.DataDepositPerByte(),
-]).pipe(map(([base, perByte]) => base + perByte * BigInt(TITLE_LENGTH)));
-
-const proposeBountyFee$ = typedApi.tx.Utility.batch({
-  calls: [
-    typedApi.tx.System.remark_with_event({
-      remark: Binary.fromText(REMARK_TEXT),
-    }).decodedCall,
-    typedApi.tx.Bounties.propose_bounty({
-      value: 0n,
-      description: Binary.fromBytes(new Uint8Array(TITLE_LENGTH)),
-    }).decodedCall,
-  ],
-}).getEstimatedFees(ALICE);
-
-export const curatorDeposit$ = from(
-  Promise.all([
-    typedApi.constants.Balances.ExistentialDeposit(),
-    typedApi.constants.Bounties.CuratorDepositMin(),
-  ])
-).pipe(
-  map(
-    ([existentialDeposit, minCuratorDeposit = 0n]) =>
-      existentialDeposit + minCuratorDeposit
-  )
-);
-
-const referendaSdk = createReferendaSdk(typedApi);
-const submitReferendumFee$ = combineLatest([
-  curatorDeposit$,
-  typedApi.tx.Utility.batch({
-    calls: [
-      typedApi.tx.Bounties.approve_bounty({ bounty_id: 0 }).decodedCall,
-      typedApi.tx.Scheduler.schedule({
-        when: 0,
-        priority: 255,
-        call: typedApi.tx.Bounties.propose_curator({
-          bounty_id: 0,
-          curator: MultiAddress.Id(ALICE),
-          fee: 0n,
-        }).decodedCall,
-        maybe_periodic: undefined,
-      }).decodedCall,
-    ],
-  }).getEncodedData(),
-]).pipe(
-  switchMap(([curatorDeposit, proposal]) =>
-    typedApi.tx.Utility.batch({
-      calls: [
-        typedApi.tx.Balances.transfer_keep_alive({
-          value: curatorDeposit,
-          dest: MultiAddress.Id(ALICE),
-        }).decodedCall,
-        referendaSdk.createReferenda(
-          {
-            type: "Origins",
-            value: {
-              type: "Treasurer",
-              value: undefined,
-            },
-          },
-          proposal
-        ).decodedCall,
-      ],
-    }).getEstimatedFees(ALICE)
-  )
-);
-
-const decisionDepositFee$ = typedApi.tx.Referenda.place_decision_deposit({
-  index: 0,
-}).getEstimatedFees(ALICE);
-
 const depositCosts$ = combineLatest([
-  bountyDeposit$,
   submissionDeposit,
-  bountyValue$.pipe(
-    switchMap((v) =>
-      decisionDeposit(v ? BigInt(v * 10 ** TOKEN_DECIMALS) : null)
-    )
-  ),
+  bountyValue$.pipe(switchMap((v) => decisionDeposit(v ? BigInt(Math.round(v * 10 ** TOKEN_DECIMALS)) : null))),
 ]).pipe(map((r) => r.reduce(sum, 0n)));
 
-const feeCosts$ = combineLatest([
-  proposeBountyFee$,
-  submitReferendumFee$,
-  // Counting curator deposit as a "fee", because it's balance being transfered from the signer to the curator
-  curatorDeposit$,
-  decisionDepositFee$,
-]).pipe(map((v) => v.reduce(sum, 0n)));
-
+// Create estimatedCost$ that only includes deposits for now
+// Fees will be calculated separately when we have form data
 export const estimatedCost$ = state(
   combineLatest({
     deposits: depositCosts$,
-    fees: feeCosts$,
+    fees: of(0n),
   }),
-  null
+  null,
 );
+
+// Function to calculate fees for a specific form data
+export const calculateFees = (formData: { prizePool: number; findersFeePercent?: number; beneficiary: string; finder?: string }) => {
+  if (!formData.prizePool || !formData.beneficiary) return of(0n);
+
+  const prizePoolAmount = BigInt(Math.round(formData.prizePool * 10 ** TOKEN_DECIMALS));
+
+  // The native asset is the asset at location {"parents":0,"interior":"Here"}
+  const NATIVE_ASSET_V3 = {
+    V3: {
+      id: { Concrete: { parents: 0, interior: { Here: null } } },
+      fun: { Fungible: 0n },
+    },
+  };
+
+  const prizePoolCall = typedApi.tx.Treasury.spend({
+    amount: prizePoolAmount,
+    beneficiary: MultiAddress.Id(formData.beneficiary),
+    asset_kind: NATIVE_ASSET_V3,
+  });
+
+  let finalCall = prizePoolCall;
+  let totalValue = prizePoolAmount;
+
+  if (formData.findersFeePercent && formData.finder) {
+    const finderFeeAmount = (prizePoolAmount * BigInt(formData.findersFeePercent)) / 100n;
+    const finderFeeCall = typedApi.tx.Treasury.spend({
+      amount: finderFeeAmount,
+      beneficiary: MultiAddress.Id(formData.finder),
+      asset_kind: NATIVE_ASSET_V3,
+    });
+    finalCall = typedApi.tx.Utility.batch_all({
+      calls: [prizePoolCall.decodedCall, finderFeeCall.decodedCall],
+    });
+    totalValue += finderFeeAmount;
+  }
+
+  return from(
+    finalCall.getEncodedData().then((callData) => referendaSdk.createSpenderReferenda(callData, totalValue))
+  ).pipe(
+    switchMap((tx) => (tx ? from(tx.getEstimatedFees(ALICE)) : of(0n)))
+  );
+};

@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useEffect, useState } from "react"
-import { useForm, FormProvider } from "react-hook-form"
+import { useForm, FormProvider, useWatch } from "react-hook-form"
 import { SubmitModal } from "../SubmitModal"
 import { submit } from "../SubmitModal/modalActions"
 import { Form } from "../ui/form"
@@ -10,36 +10,33 @@ import { emptyNumeric, type FormSchema, formSchema } from "./formSchema"
 import { FundingSection } from "./FundingSection"
 import { ReviewSection } from "./ReviewSection"
 import { ScopeSection } from "./ScopeSection"
-import { SupervisorsSection } from "./SupervisorsSection"
-import { TimelineSection } from "./TimelineSection"
+import { BeneficiariesSection } from "./BeneficiariesSection"
 import { WelcomeSection } from "./WelcomeSection"
 import { ArrowLeft, ArrowRight, Rocket } from "lucide-react"
-import { estimatedCost$, signerBalance$, estimatedTimeline$ } from "./data"
+import { estimatedCost$, signerBalance$ } from "./data"
 import { selectedAccount$ } from "@/components/SelectAccount"
 import { useStateObservable } from "@react-rxjs/core"
-import { addWeeks, differenceInDays } from "date-fns"
+import { createSignal } from "@react-rxjs/utils"
+import { state, bind } from "@react-rxjs/core"
 
 const defaultValues: Partial<FormSchema> = {
-  prizePool: emptyNumeric,
-  findersFee: emptyNumeric,
-  supervisorsFee: emptyNumeric,
-  supervisors: [],
-  signatoriesThreshold: 2,
-  projectCompletion: undefined,
-  fundsExpiry: 1,
   projectTitle: "",
   projectScope: "",
-  milestones: [],
+  prizePool: 0,
+  findersFeePercent: 10,
+  beneficiary: "",
+  finder: "",
 }
 
 const steps = [
   { id: "welcome", title: "Welcome", Component: WelcomeSection },
   { id: "funding", title: "Funding", Component: FundingSection },
-  { id: "supervisors", title: "Supervisors", Component: SupervisorsSection },
-  { id: "timeline", title: "Timeline", Component: TimelineSection },
+  { id: "beneficiaries", title: "Beneficiaries", Component: BeneficiariesSection },
   { id: "scope", title: "Project Scope", Component: ScopeSection },
   { id: "review", title: "Review & Submit", Component: ReviewSection },
 ]
+
+export const [formController$, setFormController] = createSignal<any>()
 
 export const RfpForm = () => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
@@ -48,30 +45,45 @@ export const RfpForm = () => {
   const estimatedCost = useStateObservable(estimatedCost$)
   const currentBalance = useStateObservable(signerBalance$)
   const selectedAccount = useStateObservable(selectedAccount$)
-  const estimatedTimeline = useStateObservable(estimatedTimeline$)
 
-  const methods = useForm<FormSchema>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      ...defaultValues,
-      ...JSON.parse(localStorage.getItem("rfp-form") ?? "{}", (key, value) => {
-        if (key === "projectCompletion" && value) {
-          return new Date(value)
+  // Clear any old form data that might contain supervisors
+  useEffect(() => {
+    const storedData = localStorage.getItem("rfp-form")
+    if (storedData) {
+      try {
+        const parsed = JSON.parse(storedData)
+        // If the stored data has supervisors but no beneficiaries, clear it
+        if (parsed.supervisors && !parsed.beneficiaries) {
+          localStorage.removeItem("rfp-form")
+          console.log("Cleared old form data with supervisors")
         }
-        return value
-      }),
-    },
+      } catch (e) {
+        // If parsing fails, clear the data
+        localStorage.removeItem("rfp-form")
+        console.log("Cleared invalid form data")
+      }
+    }
+  }, [])
+
+  const form = useForm<FormSchema>({
+    resolver: zodResolver(formSchema),
+    defaultValues,
     mode: "onChange",
   })
 
+  // Move setFormController inside useEffect to avoid hook call issues
+  useEffect(() => {
+    setFormController(form)
+  }, [form])
+
   const {
-    watch,
-    control,
     handleSubmit,
-    setValue,
-    getValues,
-    formState: { errors, isValid: isFormValid },
-  } = methods
+    control,
+    formState: { isValid, errors },
+    watch,
+  } = form
+
+  const allFormValues = watch()
 
   useEffect(() => {
     const subscription = watch((data) => {
@@ -100,7 +112,7 @@ export const RfpForm = () => {
 
   const handleResetForm = () => {
     if (!confirm("Are you sure you want to reset the form? This will clear all your progress.")) return
-    Object.entries(defaultValues).forEach(([key, value]) => setValue(key as keyof FormSchema, value as any))
+    Object.entries(defaultValues).forEach(([key, value]) => form.setValue(key as keyof FormSchema, value as any))
     setIsReturnFundsAgreed(false)
     setCurrentStepIndex(0)
     window.scrollTo(0, 0)
@@ -117,24 +129,12 @@ export const RfpForm = () => {
       ? currentBalance >= totalRequiredCost
       : selectedAccount === null
 
-  const fundsExpiry = getValues("fundsExpiry")
-  const projectCompletion = getValues("projectCompletion")
-  const submissionDeadlineForDevDays = estimatedTimeline
-    ? addWeeks(estimatedTimeline.bountyFunding, fundsExpiry || 1)
-    : new Date()
-  const enoughDevDays = projectCompletion
-    ? differenceInDays(projectCompletion, submissionDeadlineForDevDays) >= 7
-    : true
-
-  const supervisors = getValues("supervisors")
-
   const isSubmitDisabled =
     hasErrors ||
-    !isFormValid ||
+    !isValid ||
     (isReviewStep && !isReturnFundsAgreed) ||
     (isReviewStep && selectedAccount !== null && !hasSufficientBalanceForButton) ||
-    (isReviewStep && !enoughDevDays) ||
-    (isReviewStep && (!supervisors || supervisors.length === 0))
+    (isReviewStep && (!allFormValues?.beneficiary || !allFormValues?.finder))
 
   const hasSufficientBalanceForWarning =
     selectedAccount !== null && currentBalance !== null && totalRequiredCost !== null
@@ -142,8 +142,8 @@ export const RfpForm = () => {
       : true
 
   return (
-    <FormProvider {...methods}>
-      <Form {...methods}>
+    <FormProvider {...form}>
+      <Form {...form}>
         <form onSubmit={handleSubmit(submit)} className="space-y-12">
           <div className="poster-section">
             {isReviewStep ? (
@@ -154,9 +154,7 @@ export const RfpForm = () => {
                 hasSufficientBalance={hasSufficientBalanceForWarning}
                 currentBalance={currentBalance}
                 totalRequiredCost={totalRequiredCost}
-                setValue={setValue}
-                submissionDeadline={submissionDeadlineForDevDays}
-                navigateToStep={navigateToStepById} // Pass the navigation function
+                navigateToStep={navigateToStepById}
               />
             ) : (
               // @ts-ignore
@@ -200,9 +198,8 @@ export const RfpForm = () => {
                 {isReviewStep && (
                   <button
                     type="submit"
-                    className={`poster-btn btn-success flex items-center gap-2 w-full justify-center md:w-auto ${
-                      isSubmitDisabled ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
+                    className={`poster-btn btn-success flex items-center gap-2 w-full justify-center md:w-auto ${isSubmitDisabled ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
                     disabled={isSubmitDisabled}
                   >
                     Launch RFP

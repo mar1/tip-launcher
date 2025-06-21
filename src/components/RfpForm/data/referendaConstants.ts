@@ -5,9 +5,11 @@ import {
   PolkadotRuntimeOriginCaller,
   ReferendaTrack,
 } from "@polkadot-api/sdk-governance";
+import { state } from "@react-rxjs/core";
 import { CompatibilityLevel } from "polkadot-api";
+import { from } from "rxjs";
 
-const referendaSdk = createReferendaSdk(typedApi, {
+export const referendaSdk = createReferendaSdk(typedApi, {
   spenderOrigin: kusamaSpenderOrigin,
 });
 
@@ -58,3 +60,7 @@ export const referendaDuration = (value: bigint | null) =>
       value.track.confirm_period +
       value.track.min_enactment_period
   );
+
+export const curatorDeposit = typedApi.constants.Bounties.CuratorDepositMax();
+
+export const curatorDeposit$ = state(from(curatorDeposit), null);

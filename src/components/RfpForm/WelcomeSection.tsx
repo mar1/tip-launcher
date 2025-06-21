@@ -15,14 +15,14 @@ export const WelcomeSection: FC = () => (
 
     {/* Content overlay */}
     <div className="relative z-10 max-w-2xl">
-      <h2 className="text-4xl font-medium mb-6 text-midnight-koi">Launch your request for proposal</h2>
+      <h2 className="text-4xl font-medium mb-6 text-midnight-koi">Launch a tip request</h2>
 
       <div className="space-y-4 text-lg leading-relaxed text-pine-shadow">
         <p>
-          This tool guides you through creating an RFP (request for proposal).
+          This tool guides you through creating a tip request.
         </p>
         <p>
-          After completing the form, you'll submit three transactions to set up the RFP. Then we'll provide a
+          After completing the form, you'll submit three transactions to set up the tip request. Then we'll provide a
           pre-formatted body for your referendum.
         </p>
       </div>
