@@ -8,7 +8,6 @@ import {
   combineLatest,
   filter,
   map,
-  merge,
   switchMap,
 } from "rxjs";
 import {
@@ -25,18 +24,18 @@ export const referendumCreationTx$ = state(
   submittedFormData$.pipe(
     filter((v) => !!v),
     switchMap((formData) => {
-      const curatorAddr = formData.beneficiary;
+      const tipRecipientAddr = formData.tipBeneficiary;
 
       const amount$ = combineLatest([
         curatorDeposit$,
-        typedApi.query.System.Account.getValue(curatorAddr),
+        typedApi.query.System.Account.getValue(tipRecipientAddr),
       ]).pipe(map(([deposit, account]) => {
         if (!account) return 0n;
         return (deposit || 0n) - account.data.free;
       }));
 
       const getReferendumProposal = async (): Promise<TxWithExplanation> => {
-        const prizePoolAmount = BigInt(Math.round(formData.prizePool * Math.pow(10, TOKEN_DECIMALS)));
+        const tipAmountValue = BigInt(Math.round(formData.tipAmount * Math.pow(10, TOKEN_DECIMALS)));
 
         // The native asset is the asset at location {"parents":0,"interior":"Here"}
         const NATIVE_ASSET_V3 = {
@@ -46,26 +45,26 @@ export const referendumCreationTx$ = state(
           },
         };
 
-        const prizePoolCall = typedApi.tx.Treasury.spend({
-          amount: prizePoolAmount,
-          beneficiary: MultiAddress.Id(formData.beneficiary),
+        const tipCall = typedApi.tx.Treasury.spend({
+          amount: tipAmountValue,
+          beneficiary: MultiAddress.Id(formData.tipBeneficiary),
           asset_kind: NATIVE_ASSET_V3,
         });
 
-        let finalCall = prizePoolCall;
-        let totalValue = prizePoolAmount;
+        let finalCall = tipCall;
+        let totalValue = tipAmountValue;
 
-        if (formData.findersFeePercent && formData.finder) {
-          const finderFeeAmount = (prizePoolAmount * BigInt(formData.findersFeePercent)) / 100n;
-          const finderFeeCall = typedApi.tx.Treasury.spend({
-            amount: finderFeeAmount,
-            beneficiary: MultiAddress.Id(formData.finder),
+        if (formData.referralFeePercent && formData.referral) {
+          const referralFeeAmount = (tipAmountValue * BigInt(formData.referralFeePercent)) / 100n;
+          const referralFeeCall = typedApi.tx.Treasury.spend({
+            amount: referralFeeAmount,
+            beneficiary: MultiAddress.Id(formData.referral),
             asset_kind: NATIVE_ASSET_V3,
           });
           finalCall = typedApi.tx.Utility.batch_all({
-            calls: [prizePoolCall.decodedCall, finderFeeCall.decodedCall],
+            calls: [tipCall.decodedCall, referralFeeCall.decodedCall],
           });
-          totalValue += finderFeeAmount;
+          totalValue += referralFeeAmount;
         }
 
         // Use createSpenderReferenda instead of createReferenda
@@ -77,12 +76,12 @@ export const referendumCreationTx$ = state(
         return {
           tx: spenderReferenda,
           explanation: {
-            text: "Treasury spend referendum",
+            text: "Tip referendum proposal",
             params: {
-              beneficiary: formData.beneficiary,
-              amount: formatToken(prizePoolAmount),
-              finder: formData.finder || "None",
-              finderFee: formData.findersFeePercent ? `${formData.findersFeePercent}%` : "None",
+              tipRecipient: formData.tipBeneficiary,
+              amount: formatToken(tipAmountValue),
+              referral: formData.referral || "None",
+              referralFee: formData.referralFeePercent ? `${formData.referralFeePercent}%` : "None",
             },
           },
         };
@@ -96,7 +95,7 @@ export const referendumCreationTx$ = state(
         proposalCallData,
         proposalTxExplanation,
         amount$,
-        getTrack(BigInt(Math.round(formData.prizePool * Math.pow(10, TOKEN_DECIMALS)))),
+        getTrack(BigInt(Math.round(formData.tipAmount * Math.pow(10, TOKEN_DECIMALS)))),
       ]).pipe(
         map(
           ([
@@ -110,13 +109,13 @@ export const referendumCreationTx$ = state(
             if (amount > 0) {
               calls.push({
                 tx: typedApi.tx.Balances.transfer_keep_alive({
-                  dest: MultiAddress.Id(curatorAddr),
+                  dest: MultiAddress.Id(tipRecipientAddr),
                   value: amount,
                 }),
                 explanation: {
-                  text: "Transfer balance to curator",
+                  text: "Transfer balance to tip recipient",
                   params: {
-                    destination: curatorAddr,
+                    destination: tipRecipientAddr,
                     value: formatToken(amount),
                   },
                 },
@@ -126,7 +125,7 @@ export const referendumCreationTx$ = state(
             calls.push({
               tx: referendaSdk.createReferenda(track.origin, proposal),
               explanation: {
-                text: "Create referendum",
+                text: "Create tip referendum",
                 params: {
                   track: formatTrackName(track.track.name),
                   call: proposalExplanation,
@@ -162,7 +161,7 @@ const formatTrackName = (track: string) => track.replace(/_/g, " ");
 export const [referendumCreationProcess$, submitReferendumCreation] =
   createTxProcess(referendumCreationTx$.pipe(map((v) => v?.tx ?? null)));
 
-export const rfpReferendum$ = state(
+export const tipReferendum$ = state(
   referendumCreationProcess$.pipe(
     filter((v) => v?.type === "finalized" && v.ok),
     switchMap(async (v) => {

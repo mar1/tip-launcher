@@ -4,41 +4,41 @@ import { formatToken, formatUsd } from "@/lib/formatToken"
 import { useStateObservable } from "@react-rxjs/core"
 import { TriangleAlert, CheckCircle2, Info } from "lucide-react"
 import { type FC, useEffect, useMemo } from "react"
-import { useWatch, type DeepPartialSkipArrayKey, useFormContext } from "react-hook-form"
+import { useWatch, type DeepPartialSkipArrayKey } from "react-hook-form"
 import { openSelectAccount, selectedAccount$ } from "../SelectAccount"
 import { estimatedCost$, signerBalance$ } from "./data"
-import { calculatePriceTotals, setBountyValue } from "./data/price"
+import { calculatePriceTotals, setTipValue } from "./data/price"
 import { currencyRate$ } from "@/services/currencyRate"
 import { FormInputField } from "./FormInputField"
-import { type RfpControlType, type FormSchema, parseNumber } from "./formSchema"
+import { type TipControlType, type FormSchema, parseNumber } from "./formSchema"
 
-export const FundingSection: FC<{ control: RfpControlType }> = ({ control }) => {
-  const prizePool = useWatch({ control, name: "prizePool" })
-  const findersFeePercent = useWatch({ control, name: "findersFeePercent" })
+export const FundingSection: FC<{ control: TipControlType }> = ({ control }) => {
+  const tipAmount = useWatch({ control, name: "tipAmount" })
+  const referralFeePercent = useWatch({ control, name: "referralFeePercent" })
 
-  // Calculate finder's fee amount from percentage
-  const findersFeeAmount = useMemo(() => {
-    const prizePoolAmount = parseNumber(prizePool) || 0
-    const feePercent = parseNumber(findersFeePercent) || 0
-    return (prizePoolAmount * feePercent) / 100
-  }, [prizePool, findersFeePercent])
+  // Calculate referral fee amount from percentage
+  const referralFeeAmount = useMemo(() => {
+    const tipAmountValue = parseNumber(tipAmount) || 0
+    const feePercent = parseNumber(referralFeePercent) || 0
+    return (tipAmountValue * feePercent) / 100
+  }, [tipAmount, referralFeePercent])
 
   return (
     <div className="poster-card">
-      <h3 className="text-3xl font-medium mb-8 text-midnight-koi">Funding</h3>
+      <h3 className="text-3xl font-medium mb-8 text-midnight-koi">Tip Amount</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
         <FormInputField
           control={control}
-          name="prizePool"
-          label="Prize Pool (USD)"
-          description="amount awarded to implementors"
+          name="tipAmount"
+          label="Tip Amount (USD)"
+          description="amount to be awarded to the tip recipient"
           type="number"
         />
         <FormInputField
           control={control}
-          name="findersFeePercent"
-          label="Finder's Fee (%)"
-          description="percentage of prize pool awarded to the referral"
+          name="referralFeePercent"
+          label="Referral Fee (%)"
+          description="percentage of tip amount awarded to the referral"
           type="number"
           min={0}
           max={100}
@@ -46,15 +46,15 @@ export const FundingSection: FC<{ control: RfpControlType }> = ({ control }) => 
         />
       </div>
 
-      {/* Finder's Fee Amount Display */}
-      {findersFeeAmount > 0 && (
+      {/* Referral Fee Amount Display */}
+      {referralFeeAmount > 0 && (
         <div className="mb-8 bg-canvas-cream border border-pine-shadow-20 rounded-lg p-4">
           <div className="flex items-center gap-3">
             <Info size={20} className="text-pine-shadow-60" />
             <div>
-              <span className="text-sm text-pine-shadow">Finder's Fee Amount: </span>
+              <span className="text-sm text-pine-shadow">Referral Fee Amount: </span>
               <span className="text-sm font-medium text-midnight-koi">
-                {formatUsd(findersFeeAmount)}
+                {formatUsd(referralFeeAmount)}
               </span>
             </div>
           </div>
@@ -67,27 +67,27 @@ export const FundingSection: FC<{ control: RfpControlType }> = ({ control }) => 
   )
 }
 
-const TipCategoryDisplay: FC<{ control: RfpControlType }> = ({ control }) => {
-  const prizePool = useWatch({ control, name: "prizePool" })
+const TipCategoryDisplay: FC<{ control: TipControlType }> = ({ control }) => {
+  const tipAmount = useWatch({ control, name: "tipAmount" })
   const currencyRate = useStateObservable(currencyRate$)
 
   const tipCategory = useMemo(() => {
-    const prizePoolAmount = parseNumber(prizePool) || 0
+    const tipAmountValue = parseNumber(tipAmount) || 0
 
-    if (prizePoolAmount === 0 || !currencyRate) {
+    if (tipAmountValue === 0 || !currencyRate) {
       return null
     }
 
-    const prizePoolKSM = prizePoolAmount / currencyRate
+    const tipAmountKSM = tipAmountValue / currencyRate
 
-    if (prizePoolKSM <= 8.25) {
+    if (tipAmountKSM <= 8.25) {
       return { category: "Small Tipper", color: "text-lilypad" }
-    } else if (prizePoolKSM <= 33.33) {
+    } else if (tipAmountKSM <= 33.33) {
       return { category: "Big Tipper", color: "text-sun-bleach" }
     } else {
       return { category: "Too big for a tip request", color: "text-tomato-stamp" }
     }
-  }, [prizePool, currencyRate])
+  }, [tipAmount, currencyRate])
 
   if (!tipCategory) {
     return null
@@ -108,10 +108,9 @@ const TipCategoryDisplay: FC<{ control: RfpControlType }> = ({ control }) => {
   )
 }
 
-const BalanceCheck: FC<{ control: RfpControlType }> = ({ control }) => {
-  const prizePool = useWatch({ control, name: "prizePool" })
-  const findersFeePercent = useWatch({ control, name: "findersFeePercent" })
-  const supervisorsFee = useWatch({ control, name: "supervisorsFee" })
+const BalanceCheck: FC<{ control: TipControlType }> = ({ control }) => {
+  const tipAmount = useWatch({ control, name: "tipAmount" })
+  const referralFeePercent = useWatch({ control, name: "referralFeePercent" })
 
   const currencyRate = useStateObservable(currencyRate$)
   const estimatedCost = useStateObservable(estimatedCost$)
@@ -120,22 +119,22 @@ const BalanceCheck: FC<{ control: RfpControlType }> = ({ control }) => {
 
   useEffect(() => {
     const formValuesForTotals: DeepPartialSkipArrayKey<FormSchema> = {
-      prizePool: parseNumber(prizePool) ?? undefined,
-      findersFeePercent: parseNumber(findersFeePercent) ?? undefined,
+      tipAmount: parseNumber(tipAmount) ?? undefined,
+      referralFeePercent: parseNumber(referralFeePercent) ?? undefined,
     }
     const { totalAmountToken } = calculatePriceTotals(formValuesForTotals)
-    // Only set bounty value if there's a prize pool, otherwise estimatedCost might show a value based on 0 USD
-    if ((parseNumber(prizePool) || 0) > 0) {
-      setBountyValue(totalAmountToken)
+    // Only set tip value if there's a tip amount, otherwise estimatedCost might show a value based on 0 USD
+    if ((parseNumber(tipAmount) || 0) > 0) {
+      setTipValue(totalAmountToken)
     } else {
-      setBountyValue(null) // Reset estimated cost if prize pool is cleared or zero
+      setTipValue(null) // Reset estimated cost if tip amount is cleared or zero
     }
-  }, [prizePool, findersFeePercent, currencyRate])
+  }, [tipAmount, referralFeePercent, currencyRate])
 
-  const prizePoolAmount = parseNumber(prizePool) || 0
+  const tipAmountValue = parseNumber(tipAmount) || 0
 
   const renderSpecificBalanceMessages = () => {
-    // This function is only called when prizePoolAmount > 0 and estimatedCost is available.
+    // This function is only called when tipAmountValue > 0 and estimatedCost is available.
     // So, estimatedCost is guaranteed to be non-null here.
 
     if (!selectedAccount) {
@@ -171,7 +170,7 @@ const BalanceCheck: FC<{ control: RfpControlType }> = ({ control }) => {
       <div className="poster-alert alert-success flex items-center gap-3 mt-2">
         <CheckCircle2 size={20} className="shrink-0 text-lilypad" />
         <div className="text-sm">
-          <strong>Nice:</strong> you have enough balance ({formatToken(currentBalance)}) to launch the RFP 🚀
+          <strong>Nice:</strong> you have enough balance ({formatToken(currentBalance)}) to submit the tip referendum 🚀
         </div>
       </div>
     )
@@ -181,7 +180,7 @@ const BalanceCheck: FC<{ control: RfpControlType }> = ({ control }) => {
     <div className="bg-canvas-cream border border-pine-shadow-20 rounded-lg p-6">
       <p className="text-pine-shadow leading-relaxed mb-4">
         Please note that you'll need a minimum of{" "}
-        {prizePoolAmount > 0 ? (
+        {tipAmountValue > 0 ? (
           estimatedCost ? (
             <strong className="text-midnight-koi font-semibold">
               {formatToken(estimatedCost.deposits + estimatedCost.fees)}
@@ -190,17 +189,18 @@ const BalanceCheck: FC<{ control: RfpControlType }> = ({ control }) => {
             <span className="text-pine-shadow-60">(calculating based on inputs…)</span>
           )
         ) : (
-          <span className="text-pine-shadow-60">(enter prize pool to see cost)</span>
+          <span className="text-pine-shadow-60">(enter tip amount to see cost)</span>
         )}
-        {prizePoolAmount > 0 && estimatedCost && (
+        {tipAmountValue > 0 && estimatedCost && (
           <>
             {" "}
-            to submit the RFP ({formatToken(estimatedCost.fees)} in fees. You'll get{" "}
-            {formatToken(estimatedCost.deposits)} in deposits back once the RFP ends).
+            to submit the tip referendum ({formatToken(estimatedCost.fees)} in fees. You'll get{" "}
+            {formatToken(estimatedCost.deposits)} in deposits back once the referendum ends).
           </>
         )}
       </p>
-      {prizePoolAmount > 0 && estimatedCost && <div>{renderSpecificBalanceMessages()}</div>}
+
+      {tipAmountValue > 0 && estimatedCost && renderSpecificBalanceMessages()}
     </div>
   )
 }

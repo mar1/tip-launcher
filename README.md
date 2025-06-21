@@ -1,14 +1,15 @@
-# RFP Launcher
+# Tip Referendum Launcher
 
-A dApp for creating and submitting Requests for Proposals (RFPs) on Kusama.
+A dApp for creating and submitting tip referendums on Kusama with big tipper and small tipper tracks.
 
 ## Features
 
-- Create and submit an RFP using structured inputs.
+- Create and submit tip referendums using structured inputs.
 - Integrates with popular Substrate wallets (Nova, Talisman, Subwallet).
 - Validates that the selected account has sufficient balance.
 - Generates markdown-ready content for the referendum body.
 - Supports Chopsticks integration for local fork testing.
+- Supports both big tipper and small tipper track categories.
 
 ## Development
 
@@ -50,7 +51,7 @@ This configures the project to target the local Chopsticks process and enables a
 
 The project currently is hosted on github pages through a github action.
 
-If you want to preview changes in a fork, configure the `BASE_URL` environment variable in your github environment config. For example, something deployed in github pages `https://{something}.githubpages.io/rfp-launcher/` needs a `BASE_URL` environment variable with the value `/rfp-launcher/`
+If you want to preview changes in a fork, configure the `BASE_URL` environment variable in your github environment config. For example, something deployed in github pages `https://{something}.githubpages.io/tip-referendum-launcher/` needs a `BASE_URL` environment variable with the value `/tip-referendum-launcher/`
 
 ## Theming
 
@@ -69,7 +70,7 @@ src/
 │   ├── RfpForm                  # Main form and its components, separated by section
 │   │   └── data                 # Common functions to show and validate form data
 │   ├── SelectAccount            # Modal for wallet integration and account selection
-│   ├── SubmitModal              # Modal to submit and launch the RFP
+│   ├── SubmitModal              # Modal to submit and launch the tip referendum
 │   │   └── tx                   # Functions to create and track transactions
 │   └── ui                       # Stateless UI components from shadcn/ui
 ├── lib/                         # Utility functions that could live in separate libraries

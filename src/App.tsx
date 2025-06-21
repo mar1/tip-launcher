@@ -1,5 +1,5 @@
 import { Header } from "./components/Header"
-import { RfpForm } from "./components/RfpForm"
+import { TipForm } from "./components/RfpForm"
 
 function App() {
   return (
@@ -9,7 +9,7 @@ function App() {
 
       {/* Main content with poster spacing */}
       <main className="poster-container">
-        <RfpForm />
+        <TipForm />
       </main>
     </div>
   )

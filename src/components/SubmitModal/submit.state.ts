@@ -10,7 +10,7 @@ import {
 import {
   referendumCreationProcess$,
   referendumCreationTx$,
-  rfpReferendum$,
+  tipReferendum$,
 } from "./tx/referendumCreation";
 import { TxWithExplanation } from "./tx/types";
 
@@ -75,6 +75,6 @@ export const activeTxStep$ = state(
 );
 
 export const referendumIndex$ = state(
-  rfpReferendum$.pipe(map((v) => v.index)),
+  tipReferendum$.pipe(map((v) => v.index)),
   undefined
 );

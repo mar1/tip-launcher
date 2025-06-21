@@ -7,17 +7,17 @@ import { currencyRate$ } from "@/services/currencyRate";
 export const calculatePriceTotals = (formFields: DeepPartialSkipArrayKey<FormSchema>) => {
   const conversionRate = currencyRate$.getValue();
 
-  const prizePool = parseNumber(formFields.prizePool) || 0;
-  const findersFeePercent = parseNumber(formFields.findersFeePercent) || 0;
+  const tipAmount = parseNumber(formFields.tipAmount) || 0;
+  const referralFeePercent = parseNumber(formFields.referralFeePercent) || 0;
 
-  // Calculate finder's fee amount from percentage
-  const findersFeeAmount = (prizePool * findersFeePercent) / 100;
+  // Calculate referral fee amount from percentage
+  const referralFeeAmount = (tipAmount * referralFeePercent) / 100;
 
-  const totalAmount = prizePool + findersFeeAmount;
+  const totalAmount = tipAmount + referralFeeAmount;
   const totalAmountToken = conversionRate ? totalAmount / conversionRate : null;
 
   return { totalAmount, totalAmountToken };
 };
 
-export const [setBountyValue$, setBountyValue] = createSignal<number | null>();
-export const bountyValue$ = state(setBountyValue$, null);
+export const [setTipValue$, setTipValue] = createSignal<number | null>();
+export const tipValue$ = state(setTipValue$, null);

@@ -2,11 +2,11 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useEffect, useState } from "react"
-import { useForm, FormProvider, useWatch } from "react-hook-form"
+import { useForm, FormProvider } from "react-hook-form"
 import { SubmitModal } from "../SubmitModal"
 import { submit } from "../SubmitModal/modalActions"
 import { Form } from "../ui/form"
-import { emptyNumeric, type FormSchema, formSchema } from "./formSchema"
+import { type FormSchema, formSchema } from "./formSchema"
 import { FundingSection } from "./FundingSection"
 import { ReviewSection } from "./ReviewSection"
 import { ScopeSection } from "./ScopeSection"
@@ -17,28 +17,27 @@ import { estimatedCost$, signerBalance$ } from "./data"
 import { selectedAccount$ } from "@/components/SelectAccount"
 import { useStateObservable } from "@react-rxjs/core"
 import { createSignal } from "@react-rxjs/utils"
-import { state, bind } from "@react-rxjs/core"
 
 const defaultValues: Partial<FormSchema> = {
-  projectTitle: "",
-  projectScope: "",
-  prizePool: 0,
-  findersFeePercent: 10,
-  beneficiary: "",
-  finder: "",
+  tipTitle: "",
+  tipDescription: "",
+  tipAmount: 0,
+  referralFeePercent: 10,
+  tipBeneficiary: "",
+  referral: "",
 }
 
 const steps = [
   { id: "welcome", title: "Welcome", Component: WelcomeSection },
-  { id: "funding", title: "Funding", Component: FundingSection },
-  { id: "beneficiaries", title: "Beneficiaries", Component: BeneficiariesSection },
-  { id: "scope", title: "Project Scope", Component: ScopeSection },
+  { id: "funding", title: "Tip Amount", Component: FundingSection },
+  { id: "beneficiaries", title: "Recipients", Component: BeneficiariesSection },
+  { id: "scope", title: "Tip Details", Component: ScopeSection },
   { id: "review", title: "Review & Submit", Component: ReviewSection },
 ]
 
 export const [formController$, setFormController] = createSignal<any>()
 
-export const RfpForm = () => {
+export const TipForm = () => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [isReturnFundsAgreed, setIsReturnFundsAgreed] = useState(false)
 
@@ -46,20 +45,20 @@ export const RfpForm = () => {
   const currentBalance = useStateObservable(signerBalance$)
   const selectedAccount = useStateObservable(selectedAccount$)
 
-  // Clear any old form data that might contain supervisors
+  // Clear any old form data that might contain outdated fields
   useEffect(() => {
-    const storedData = localStorage.getItem("rfp-form")
+    const storedData = localStorage.getItem("tip-form")
     if (storedData) {
       try {
         const parsed = JSON.parse(storedData)
-        // If the stored data has supervisors but no beneficiaries, clear it
-        if (parsed.supervisors && !parsed.beneficiaries) {
-          localStorage.removeItem("rfp-form")
-          console.log("Cleared old form data with supervisors")
+        // If the stored data has outdated fields but no current fields, clear it
+        if (parsed.supervisors && !parsed.tipBeneficiary) {
+          localStorage.removeItem("tip-form")
+          console.log("Cleared old form data with outdated fields")
         }
       } catch (e) {
         // If parsing fails, clear the data
-        localStorage.removeItem("rfp-form")
+        localStorage.removeItem("tip-form")
         console.log("Cleared invalid form data")
       }
     }
@@ -87,7 +86,7 @@ export const RfpForm = () => {
 
   useEffect(() => {
     const subscription = watch((data) => {
-      localStorage.setItem("rfp-form", JSON.stringify(data))
+      localStorage.setItem("tip-form", JSON.stringify(data))
     })
     return () => subscription.unsubscribe()
   }, [watch])
@@ -134,7 +133,7 @@ export const RfpForm = () => {
     !isValid ||
     (isReviewStep && !isReturnFundsAgreed) ||
     (isReviewStep && selectedAccount !== null && !hasSufficientBalanceForButton) ||
-    (isReviewStep && (!allFormValues?.beneficiary || !allFormValues?.finder))
+    (isReviewStep && (!allFormValues?.tipBeneficiary || !allFormValues?.referral))
 
   const hasSufficientBalanceForWarning =
     selectedAccount !== null && currentBalance !== null && totalRequiredCost !== null
@@ -149,8 +148,6 @@ export const RfpForm = () => {
             {isReviewStep ? (
               <ReviewSection
                 control={control}
-                isReturnFundsAgreed={isReturnFundsAgreed}
-                setIsReturnFundsAgreed={setIsReturnFundsAgreed}
                 hasSufficientBalance={hasSufficientBalanceForWarning}
                 currentBalance={currentBalance}
                 totalRequiredCost={totalRequiredCost}
@@ -198,28 +195,15 @@ export const RfpForm = () => {
                 {isReviewStep && (
                   <button
                     type="submit"
-                    className={`poster-btn btn-success flex items-center gap-2 w-full justify-center md:w-auto ${isSubmitDisabled ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
                     disabled={isSubmitDisabled}
+                    className="poster-btn btn-primary flex items-center gap-2 w-full justify-center md:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Submit Tip Request
                     <Rocket size={16} />
+                    Submit Tip Referendum
                   </button>
                 )}
               </div>
             </div>
-
-            {isReviewStep && (
-              <div className="mt-6 text-center">
-                <button
-                  type="button"
-                  onClick={handleResetForm}
-                  className="text-sm text-tomato-stamp hover:text-midnight-koi transition-colors"
-                >
-                  Reset Entire Form
-                </button>
-              </div>
-            )}
           </div>
         </form>
       </Form>

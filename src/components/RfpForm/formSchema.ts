@@ -5,18 +5,17 @@ const requiredString = z.string().min(1, "This field is required")
 const optionalAddress = z.string().optional()
 
 export const formSchema = z.object({
-  // Scope
-  projectTitle: requiredString,
-  projectScope: requiredString,
+  // Tip Details
+  tipTitle: requiredString,
+  tipDescription: requiredString,
 
   // Funding
-  prizePool: z.coerce.number().min(0, "Prize pool must be a positive number"),
-  findersFeePercent: z.coerce.number().min(0).max(100).optional(),
-  supervisorsFee: z.coerce.number().min(0).optional(),
+  tipAmount: z.coerce.number().min(0, "Tip amount must be a positive number"),
+  referralFeePercent: z.coerce.number().min(0).max(100).optional(),
 
   // Beneficiaries
-  beneficiary: requiredString,
-  finder: optionalAddress,
+  tipBeneficiary: requiredString,
+  referral: optionalAddress,
 })
 
 export const parseNumber = (value: string | number | undefined) => {
@@ -32,6 +31,6 @@ export const emptyNumeric = "" as unknown as number
 
 export type FormSchema = z.infer<typeof formSchema>
 
-export type RfpFormContext = unknown
-export type RfpControlType = Control<FormSchema, RfpFormContext, FormSchema>
+export type TipFormContext = unknown
+export type TipControlType = Control<FormSchema, TipFormContext, FormSchema>
 

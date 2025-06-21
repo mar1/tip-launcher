@@ -1,8 +1,9 @@
 {
-  "name": "rfp-launcher",
+  "name": "tip-referendum-launcher",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "description": "A tool for creating tip referendums on Polkadot with big tipper and small tipper tracks",
   "scripts": {
     "dev": "vite",
     "dev-local": "VITE_WITH_CHOPSTICKS=true vite",

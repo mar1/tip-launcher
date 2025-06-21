@@ -4,14 +4,14 @@ import { sum } from "@/lib/math";
 import { MultiAddress } from "@polkadot-api/descriptors";
 import { state } from "@react-rxjs/core";
 import { combineLatest, from, of, switchMap, map } from "rxjs";
-import { bountyValue$ } from "./price";
+import { tipValue$ } from "./price";
 import { decisionDeposit, referendaSdk, submissionDeposit } from "./referendaConstants";
 
 const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 
 const depositCosts$ = combineLatest([
   submissionDeposit,
-  bountyValue$.pipe(switchMap((v) => decisionDeposit(v ? BigInt(Math.round(v * 10 ** TOKEN_DECIMALS)) : null))),
+  tipValue$.pipe(switchMap((v) => decisionDeposit(v ? BigInt(Math.round(v * 10 ** TOKEN_DECIMALS)) : null))),
 ]).pipe(map((r) => r.reduce(sum, 0n)));
 
 // Create estimatedCost$ that only includes deposits for now
@@ -25,10 +25,10 @@ export const estimatedCost$ = state(
 );
 
 // Function to calculate fees for a specific form data
-export const calculateFees = (formData: { prizePool: number; findersFeePercent?: number; beneficiary: string; finder?: string }) => {
-  if (!formData.prizePool || !formData.beneficiary) return of(0n);
+export const calculateFees = (formData: { tipAmount: number; referralFeePercent?: number; tipBeneficiary: string; referral?: string }) => {
+  if (!formData.tipAmount || !formData.tipBeneficiary) return of(0n);
 
-  const prizePoolAmount = BigInt(Math.round(formData.prizePool * 10 ** TOKEN_DECIMALS));
+  const tipAmountValue = BigInt(Math.round(formData.tipAmount * 10 ** TOKEN_DECIMALS));
 
   // The native asset is the asset at location {"parents":0,"interior":"Here"}
   const NATIVE_ASSET_V3 = {
@@ -38,26 +38,26 @@ export const calculateFees = (formData: { prizePool: number; findersFeePercent?:
     },
   };
 
-  const prizePoolCall = typedApi.tx.Treasury.spend({
-    amount: prizePoolAmount,
-    beneficiary: MultiAddress.Id(formData.beneficiary),
+  const tipCall = typedApi.tx.Treasury.spend({
+    amount: tipAmountValue,
+    beneficiary: MultiAddress.Id(formData.tipBeneficiary),
     asset_kind: NATIVE_ASSET_V3,
   });
 
-  let finalCall = prizePoolCall;
-  let totalValue = prizePoolAmount;
+  let finalCall = tipCall;
+  let totalValue = tipAmountValue;
 
-  if (formData.findersFeePercent && formData.finder) {
-    const finderFeeAmount = (prizePoolAmount * BigInt(formData.findersFeePercent)) / 100n;
-    const finderFeeCall = typedApi.tx.Treasury.spend({
-      amount: finderFeeAmount,
-      beneficiary: MultiAddress.Id(formData.finder),
+  if (formData.referralFeePercent && formData.referral) {
+    const referralFeeAmount = (tipAmountValue * BigInt(formData.referralFeePercent)) / 100n;
+    const referralFeeCall = typedApi.tx.Treasury.spend({
+      amount: referralFeeAmount,
+      beneficiary: MultiAddress.Id(formData.referral),
       asset_kind: NATIVE_ASSET_V3,
     });
     finalCall = typedApi.tx.Utility.batch_all({
-      calls: [prizePoolCall.decodedCall, finderFeeCall.decodedCall],
+      calls: [tipCall.decodedCall, referralFeeCall.decodedCall],
     });
-    totalValue += finderFeeAmount;
+    totalValue += referralFeeAmount;
   }
 
   return from(

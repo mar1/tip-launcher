@@ -47,7 +47,7 @@ const submitModalInternal$ = mergeWithKey({ formDataChange$, dismiss$ }).pipe(
     // At this point, event.type is 'formDataChange$' (meaning submit was initiated)
 
     if (!account) {
-      // No account connected when "Launch RFP" was clicked.
+      // No account connected when "Submit Tip Referendum" was clicked.
       // First, show the account picker.
       // Then, once an account is selected, transition to checking_balance.
       return concat(
@@ -62,7 +62,7 @@ const submitModalInternal$ = mergeWithKey({ formDataChange$, dismiss$ }).pipe(
       )
     }
 
-    // An account was already connected when "Launch RFP" was clicked.
+    // An account was already connected when "Submit Tip Referendum" was clicked.
     // Proceed directly to balance check.
     return of({ type: "checking_balance" } as ModalView)
   }),
@@ -122,7 +122,7 @@ const StepInsufficientBalance: FC<{ required: bigint; available: bigint; onDismi
           <AlertCircle className="h-5 w-5" /> Insufficient Balance
         </DialogTitle>
         <DialogDescription>
-          Your connected wallet does not have enough funds to cover the estimated costs for submitting this RFP.
+          Your connected wallet does not have enough funds to cover the estimated costs for submitting this tip referendum.
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-4 py-4">
@@ -178,7 +178,7 @@ export const SubmitModal = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Connect Wallet</DialogTitle>
-            <DialogDescription>Please connect a wallet to submit the RFP.</DialogDescription>
+            <DialogDescription>Please connect a wallet to submit the tip referendum.</DialogDescription>
           </DialogHeader>
           <PickExtension />
           <PickExtensionAccount
@@ -227,7 +227,7 @@ export const SubmitModal = () => {
       <Dialog {...dialogProps}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Submit RFP</DialogTitle>
+            <DialogTitle>Submit Tip Referendum</DialogTitle>
             <DialogDescription>
               This is a two-step process: Submit the referendum and place the decision deposit.
             </DialogDescription>

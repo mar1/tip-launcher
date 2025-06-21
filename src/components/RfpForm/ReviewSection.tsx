@@ -18,21 +18,18 @@ import {
   AlertCircle,
   ArrowLeftCircle,
 } from "lucide-react"
-import { type FC, useEffect, useState, useMemo, type Dispatch, type SetStateAction } from "react"
+import { type FC, useEffect, useState, useMemo } from "react"
 import { useWatch } from "react-hook-form"
 import { combineLatest, map } from "rxjs"
-import { Checkbox } from "../ui/checkbox"
 import { identity$ } from "./data"
-import { calculatePriceTotals, setBountyValue } from "./data/price"
+import { calculatePriceTotals, setTipValue } from "./data/price"
 import { generateMarkdown } from "./data/markdown"
 import { MarkdownPreview } from "./MarkdownPreview"
-import { parseNumber, type RfpControlType } from "./formSchema"
+import { parseNumber, type TipControlType } from "./formSchema"
 import { selectedAccount$ } from "../SelectAccount"
 
 interface ReviewSectionProps {
-  control: RfpControlType
-  isReturnFundsAgreed: boolean
-  setIsReturnFundsAgreed: Dispatch<SetStateAction<boolean>>
+  control: TipControlType
   hasSufficientBalance: boolean
   currentBalance: bigint | null
   totalRequiredCost: bigint | null
@@ -41,8 +38,6 @@ interface ReviewSectionProps {
 
 export const ReviewSection: FC<ReviewSectionProps> = ({
   control,
-  isReturnFundsAgreed,
-  setIsReturnFundsAgreed,
   hasSufficientBalance,
   currentBalance,
   totalRequiredCost,
@@ -50,7 +45,7 @@ export const ReviewSection: FC<ReviewSectionProps> = ({
 }) => {
   const selectedAccount = useStateObservable(selectedAccount$)
 
-  const { beneficiary: tipBeneficiary, finder: referral } = useWatch({ control })
+  const { tipBeneficiary, referral } = useWatch({ control })
 
   const hasBeneficiaries = !!(tipBeneficiary && referral)
 
@@ -65,7 +60,7 @@ export const ReviewSection: FC<ReviewSectionProps> = ({
             <AlertCircle size={20} className="shrink-0" />
             <div>
               <strong>Insufficient Balance:</strong> You need at least{" "}
-              <strong className="font-semibold">{formatToken(totalRequiredCost)}</strong> to launch this RFP. Your
+              <strong className="font-semibold">{formatToken(totalRequiredCost)}</strong> to submit this tip referendum. Your
               current balance is <strong className="font-semibold">{formatToken(currentBalance)}</strong>. Please add
               funds or select another wallet.
             </div>
@@ -77,9 +72,8 @@ export const ReviewSection: FC<ReviewSectionProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <FundingSummary
           control={control}
-          navigateToStep={navigateToStep}
         />
-        <ProjectSummary
+        <TipSummary
           control={control}
           hasBeneficiaries={hasBeneficiaries}
           navigateToStep={navigateToStep}
@@ -110,15 +104,14 @@ const FundingSummaryListItem: FC<{
 )
 
 const FundingSummary: FC<{
-  control: RfpControlType
-  navigateToStep: (stepId: string) => void
-}> = ({ control, navigateToStep }) => {
+  control: TipControlType
+}> = ({ control }) => {
   const formFields = useWatch({ control })
   const currencyRate = useStateObservable(currencyRate$)
   const { totalAmountToken } = calculatePriceTotals(formFields)
 
   useEffect(() => {
-    setBountyValue(totalAmountToken)
+    setTipValue(totalAmountToken)
   }, [totalAmountToken])
 
   const formattedKsmString = formatCurrency(totalAmountToken, TOKEN_SYMBOL, 2)
@@ -143,22 +136,22 @@ const FundingSummary: FC<{
     }
   }
 
-  // Calculate finder's fee amount from percentage
-  const prizePool = parseNumber(formFields.prizePool) || 0
-  const findersFeePercent = parseNumber(formFields.findersFeePercent) || 0
-  const findersFeeAmount = (prizePool * findersFeePercent) / 100
+  // Calculate referral fee amount from percentage
+  const tipAmount = parseNumber(formFields.tipAmount) || 0
+  const referralFeePercent = parseNumber(formFields.referralFeePercent) || 0
+  const referralFeeAmount = (tipAmount * referralFeePercent) / 100
 
   return (
     <div className="bg-canvas-cream border border-lake-haze rounded-lg p-6">
       <h4 className="flex items-center gap-2 text-lg font-medium text-midnight-koi mb-4">
         <DollarSign size={20} className="text-lake-haze" />
-        Funding Breakdown
+        Tip Amount Breakdown
       </h4>
 
       <div className="space-y-3">
-        <FundingSummaryListItem label="Prize Pool" value={formatUsd(formFields.prizePool)} />
+        <FundingSummaryListItem label="Tip Amount" value={formatUsd(formFields.tipAmount)} />
 
-        <FundingSummaryListItem label="Finder's Fee" value={formatUsd(findersFeeAmount)} />
+        <FundingSummaryListItem label="Referral Fee" value={formatUsd(referralFeeAmount)} />
 
         {/* Total Section */}
         <div className="pt-4 mt-4 border-t-2 border-lake-haze">
@@ -181,39 +174,39 @@ const FundingSummary: FC<{
   )
 }
 
-const ProjectSummary: FC<{
-  control: RfpControlType
+const TipSummary: FC<{
+  control: TipControlType
   hasBeneficiaries: boolean
   navigateToStep: (stepId: string) => void
 }> = ({ control, hasBeneficiaries, navigateToStep }) => {
   const formFields = useWatch({ control })
-  const tipBeneficiary = formFields.beneficiary || ""
-  const referral = formFields.finder || ""
+  const tipBeneficiary = formFields.tipBeneficiary || ""
+  const referral = formFields.referral || ""
 
   return (
     <div className="bg-canvas-cream border border-lilypad rounded-lg p-6">
       <h4 className="flex items-center gap-2 text-lg font-medium text-midnight-koi mb-4">
         <Users size={20} className="text-lilypad" />
-        Project Summary
+        Tip Summary
       </h4>
 
       <div className="space-y-4">
         <div>
-          <div className="text-xs font-medium text-pine-shadow-60 uppercase tracking-wide mb-1">Project Title</div>
+          <div className="text-xs font-medium text-pine-shadow-60 uppercase tracking-wide mb-1">Tip Title</div>
           <div className="text-sm font-medium text-midnight-koi break-words">
-            {formFields.projectTitle || "Untitled Project"}
+            {formFields.tipTitle || "Untitled Tip"}
           </div>
         </div>
 
         <div>
-          <div className="text-xs font-medium text-pine-shadow-60 uppercase tracking-wide mb-1">Beneficiaries</div>
+          <div className="text-xs font-medium text-pine-shadow-60 uppercase tracking-wide mb-1">Recipients</div>
           <div className="text-sm text-pine-shadow">
-            {hasBeneficiaries ? "2 beneficiaries configured" : "None"}
+            {hasBeneficiaries ? "2 recipients configured" : "None"}
           </div>
           {hasBeneficiaries && (
             <ul className="mt-1 space-y-0.5">
               <li>
-                <div className="text-xs text-pine-shadow-60 mb-1">Tip Beneficiary:</div>
+                <div className="text-xs text-pine-shadow-60 mb-1">Tip Recipient:</div>
                 <BeneficiaryListItem address={tipBeneficiary} />
               </li>
               <li>
@@ -275,14 +268,14 @@ const BeneficiaryListItem: FC<{ address: string | undefined }> = ({ address }) =
 }
 
 const ResultingMarkdown: FC<{
-  control: RfpControlType
+  control: TipControlType
 }> = ({ control }) => {
   const [identities, setIdentities] = useState<Record<string, string | undefined>>({})
   const formFields = useWatch({ control })
 
   useEffect(() => {
-    const tipBeneficiary = formFields.beneficiary
-    const referral = formFields.finder
+    const tipBeneficiary = formFields.tipBeneficiary
+    const referral = formFields.referral
     if (!tipBeneficiary && !referral) {
       setIdentities({})
       return
@@ -293,7 +286,7 @@ const ResultingMarkdown: FC<{
       Object.fromEntries(addresses.map((addr) => [addr, identity$(addr).pipe(map((id) => id?.value))])),
     ).subscribe((r) => setIdentities(r))
     return () => subscription.unsubscribe()
-  }, [formFields.beneficiary, formFields.finder])
+  }, [formFields.tipBeneficiary, formFields.referral])
 
   const markdown = useMemo(() => {
     const { totalAmountToken } = calculatePriceTotals(formFields)
@@ -327,7 +320,7 @@ const ResultingMarkdown: FC<{
       <div className="flex items-center justify-between mb-4">
         <h4 className="flex items-center gap-2 text-lg font-medium text-midnight-koi">
           <FileText size={20} className="text-tomato-stamp" />
-          Tip Request Body Preview
+          Tip Referendum Body Preview
         </h4>
         <div className="flex items-center gap-2">
           <button

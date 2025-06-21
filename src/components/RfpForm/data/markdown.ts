@@ -3,8 +3,6 @@ import type { DeepPartialSkipArrayKey } from "react-hook-form"
 import {
   type FormSchema,
   parseNumber,
-  type RfpControlType,
-  formSchema,
 } from "../formSchema"
 
 export function generateMarkdown(
@@ -18,35 +16,34 @@ export function generateMarkdown(
   console.log("Identities:", identities)
 
   // Extract values with fallbacks
-  const projectTitle = data.projectTitle || "Untitled Project"
-  const prizePool = parseNumber(data.prizePool) || 0
-  const findersFeePercent = parseNumber(data.findersFeePercent) || 0
-  const supervisorsFee = parseNumber(data.supervisorsFee) || 0
-  const tipBeneficiary = data.beneficiary || ""
-  const referral = data.finder || ""
-  const projectScope = data.projectScope || ""
+  const tipTitle = data.tipTitle || "Untitled Tip"
+  const tipAmount = parseNumber(data.tipAmount) || 0
+  const referralFeePercent = parseNumber(data.referralFeePercent) || 0
+  const tipBeneficiary = data.tipBeneficiary || ""
+  const referral = data.referral || ""
+  const tipDescription = data.tipDescription || ""
 
-  // Calculate finder's fee amount from percentage
-  const findersFeeAmount = (prizePool * findersFeePercent) / 100
+  // Calculate referral fee amount from percentage
+  const referralFeeAmount = (tipAmount * referralFeePercent) / 100
 
   // Generate markdown even with partial data
-  const markdown = `# ${projectTitle}
-Total Requested: $${(prizePool + findersFeeAmount).toLocaleString()}
+  const markdown = `# ${tipTitle}
+Total Requested: $${(tipAmount + referralFeeAmount).toLocaleString()}
 
-Prize Pool: $${prizePool.toLocaleString()} + Finder's Fee: $${findersFeeAmount.toLocaleString()} (${findersFeePercent}%)
+Tip Amount: $${tipAmount.toLocaleString()} + Referral Fee: $${referralFeeAmount.toLocaleString()} (${referralFeePercent}%)
 
 ${totalAmountToken ? Math.round(totalAmountToken).toLocaleString() : "TBD"
     } ${TOKEN_SYMBOL} Requested
 
-## Beneficiaries
+## Recipients
 
-**Tip Beneficiary:** ${tipBeneficiary ? (identities[tipBeneficiary] || tipBeneficiary) : "TBD"}
+**Tip Recipient:** ${tipBeneficiary ? (identities[tipBeneficiary] || tipBeneficiary) : "TBD"}
 
 **Referral:** ${referral ? (identities[referral] || referral) : "TBD"}
 
-## Project Scope
+## Tip Description
 
-${projectScope || "Project scope to be defined..."}
+${tipDescription || "Tip description to be defined..."}
 `
 
   console.log("Generated markdown:", markdown)

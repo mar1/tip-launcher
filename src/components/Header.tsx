@@ -10,12 +10,12 @@ export const Header = () => {
         <div className="flex flex-row items-center gap-3">
           <img
             src={import.meta.env.BASE_URL + "logo.svg"}
-            alt="RFP Launcher Logo"
+            alt="Tip Referendum Launcher Logo"
             className="h-14 w-auto"
           />
           <div className="poster-brand">
-            <h1 className="poster-brand-title">Tips Launcher</h1>
-            <div className="poster-brand-subtitle">Proposal Toolkit</div>
+            <h1 className="poster-brand-title">Tip Referendum Launcher</h1>
+            <div className="poster-brand-subtitle">Big Tipper & Small Tipper Tracks</div>
           </div>
         </div>
 

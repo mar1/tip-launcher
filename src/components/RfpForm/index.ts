@@ -1,2 +1,2 @@
-export { RfpForm } from "./RfpForm";
-export { formController$, setFormController } from "./RfpForm";
+export { TipForm, formController$, setFormController } from "./RfpForm";
+export { formSchema } from "./formSchema";
