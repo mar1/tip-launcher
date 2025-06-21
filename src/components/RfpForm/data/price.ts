@@ -15,9 +15,8 @@ export const calculatePriceTotals = (formFields: DeepPartialSkipArrayKey<FormSch
 
   const totalAmount = prizePool + findersFeeAmount;
   const totalAmountToken = conversionRate ? totalAmount / conversionRate : null;
-  const totalAmountWithBuffer = totalAmountToken;
 
-  return { totalAmount, totalAmountToken, totalAmountWithBuffer };
+  return { totalAmount, totalAmountToken };
 };
 
 export const [setBountyValue$, setBountyValue] = createSignal<number | null>();

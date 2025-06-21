@@ -1,4 +1,4 @@
-import { REFERENDUM_PRICE_BUFFER, TOKEN_SYMBOL } from "@/constants"
+import { TOKEN_SYMBOL } from "@/constants"
 import type { DeepPartialSkipArrayKey } from "react-hook-form"
 import {
   type FormSchema,
@@ -9,12 +9,12 @@ import {
 
 export function generateMarkdown(
   data: DeepPartialSkipArrayKey<FormSchema>,
-  totalAmountWithBuffer: number | null,
+  totalAmountToken: number | null,
   identities: Record<string, string | undefined>,
 ) {
   // Don't require full validation - work with partial data
   console.log("Generating markdown with data:", data)
-  console.log("Total amount with buffer:", totalAmountWithBuffer)
+  console.log("Total amount in tokens:", totalAmountToken)
   console.log("Identities:", identities)
 
   // Extract values with fallbacks
@@ -31,20 +31,18 @@ export function generateMarkdown(
 
   // Generate markdown even with partial data
   const markdown = `# ${projectTitle}
+Total Requested: $${(prizePool + findersFeeAmount).toLocaleString()}
 
-Prize Pool: $${prizePool.toLocaleString()}
-Finder's Fee: $${findersFeeAmount.toLocaleString()} (${findersFeePercent}%)
-Supervisor's Fee: $${supervisorsFee.toLocaleString()}
+Prize Pool: $${prizePool.toLocaleString()} + Finder's Fee: $${findersFeeAmount.toLocaleString()} (${findersFeePercent}%)
 
-${totalAmountWithBuffer ? Math.round(totalAmountWithBuffer).toLocaleString() : "TBD"
-    } ${TOKEN_SYMBOL} Requested (Amount + ${REFERENDUM_PRICE_BUFFER * 100}%)
+${totalAmountToken ? Math.round(totalAmountToken).toLocaleString() : "TBD"
+    } ${TOKEN_SYMBOL} Requested
 
 ## Beneficiaries
 
 **Tip Beneficiary:** ${tipBeneficiary ? (identities[tipBeneficiary] || tipBeneficiary) : "TBD"}
-**Referral:** ${referral ? (identities[referral] || referral) : "TBD"}
 
-Excess or unused funds will be returned to the treasury.
+**Referral:** ${referral ? (identities[referral] || referral) : "TBD"}
 
 ## Project Scope
 

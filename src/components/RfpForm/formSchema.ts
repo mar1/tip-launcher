@@ -10,9 +10,9 @@ export const formSchema = z.object({
   projectScope: requiredString,
 
   // Funding
-  prizePool: z.number().min(0, "Prize pool must be a positive number"),
-  findersFeePercent: z.number().min(0).max(100).optional(),
-  supervisorsFee: z.number().min(0).optional(),
+  prizePool: z.coerce.number().min(0, "Prize pool must be a positive number"),
+  findersFeePercent: z.coerce.number().min(0).max(100).optional(),
+  supervisorsFee: z.coerce.number().min(0).optional(),
 
   // Beneficiaries
   beneficiary: requiredString,

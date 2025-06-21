@@ -115,17 +115,17 @@ const FundingSummary: FC<{
 }> = ({ control, navigateToStep }) => {
   const formFields = useWatch({ control })
   const currencyRate = useStateObservable(currencyRate$)
-  const { totalAmountWithBuffer } = calculatePriceTotals(formFields)
+  const { totalAmountToken } = calculatePriceTotals(formFields)
 
   useEffect(() => {
-    setBountyValue(totalAmountWithBuffer)
-  }, [totalAmountWithBuffer])
+    setBountyValue(totalAmountToken)
+  }, [totalAmountToken])
 
-  const formattedKsmString = formatCurrency(totalAmountWithBuffer, TOKEN_SYMBOL, 2)
+  const formattedKsmString = formatCurrency(totalAmountToken, TOKEN_SYMBOL, 2)
   let ksmValueDisplay = "Calculating..."
   let ksmUnitDisplay = ""
 
-  if (totalAmountWithBuffer != null && formattedKsmString) {
+  if (totalAmountToken != null && formattedKsmString) {
     const parts = formattedKsmString.split(" ")
     if (parts.length >= 1) {
       ksmValueDisplay = parts[0]
@@ -160,12 +160,11 @@ const FundingSummary: FC<{
 
         <FundingSummaryListItem label="Finder's Fee" value={formatUsd(findersFeeAmount)} />
 
-        {/* Enhanced Total + Buffer Section */}
+        {/* Total Section */}
         <div className="pt-4 mt-4 border-t-2 border-lake-haze">
           <div className="flex justify-between items-start">
             <div className="flex flex-col items-start">
               <span className="text-base font-semibold text-midnight-koi">Total</span>
-              <span className="text-xs text-pine-shadow-60">+25% Buffer</span>
             </div>
             <div className="flex flex-col items-end">
               <span className="text-xl font-bold text-midnight-koi tabular-nums">{ksmValueDisplay}</span>
@@ -297,8 +296,8 @@ const ResultingMarkdown: FC<{
   }, [formFields.beneficiary, formFields.finder])
 
   const markdown = useMemo(() => {
-    const { totalAmountWithBuffer } = calculatePriceTotals(formFields)
-    return generateMarkdown(formFields, totalAmountWithBuffer, identities)
+    const { totalAmountToken } = calculatePriceTotals(formFields)
+    return generateMarkdown(formFields, totalAmountToken, identities)
   }, [formFields, identities])
 
   const copyToClipboard = async () => {

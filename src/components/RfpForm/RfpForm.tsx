@@ -202,7 +202,7 @@ export const RfpForm = () => {
                       }`}
                     disabled={isSubmitDisabled}
                   >
-                    Launch RFP
+                    Submit Tip Request
                     <Rocket size={16} />
                   </button>
                 )}

@@ -123,10 +123,10 @@ const BalanceCheck: FC<{ control: RfpControlType }> = ({ control }) => {
       prizePool: parseNumber(prizePool) ?? undefined,
       findersFeePercent: parseNumber(findersFeePercent) ?? undefined,
     }
-    const { totalAmountWithBuffer } = calculatePriceTotals(formValuesForTotals)
+    const { totalAmountToken } = calculatePriceTotals(formValuesForTotals)
     // Only set bounty value if there's a prize pool, otherwise estimatedCost might show a value based on 0 USD
     if ((parseNumber(prizePool) || 0) > 0) {
-      setBountyValue(totalAmountWithBuffer)
+      setBountyValue(totalAmountToken)
     } else {
       setBountyValue(null) // Reset estimated cost if prize pool is cleared or zero
     }
