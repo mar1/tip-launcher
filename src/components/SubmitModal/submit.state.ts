@@ -6,11 +6,12 @@ import { combineLatest, map, Observable } from "rxjs";
 import {
   decisionDepositProcess$,
   decisionDepositTx$,
+  submitdecisionDeposit,
 } from "./tx/decisionDeposit";
 import {
   referendumCreationProcess$,
   referendumCreationTx$,
-  tipReferendum$,
+  referendumIndex$,
 } from "./tx/referendumCreation";
 import { TxWithExplanation } from "./tx/types";
 
@@ -31,6 +32,7 @@ const txProcessState = (
 ) =>
   combineLatest([tx$, process$]).pipe(
     map(([tx, process]) => {
+      console.log(`[txProcessState] tag: ${tag}, tx:`, tx, "process:", process);
       if (process) {
         if (process.type === "finalized" && process.ok) {
           const referendum = referendaSdk.getSubmittedReferendum(process);
@@ -74,7 +76,12 @@ export const activeTxStep$ = state(
   null
 );
 
-export const referendumIndex$ = state(
-  tipReferendum$.pipe(map((v) => v.index)),
-  undefined
-);
+export { referendumIndex$ } from "./tx/referendumCreation";
+
+// Auto-trigger decision deposit ONLY after referendum proposal is finalized and successful
+referendumCreationProcess$.subscribe((evt) => {
+  if (evt && evt.type === "finalized" && evt.ok) {
+    // Only fire once per successful submission
+    submitdecisionDeposit();
+  }
+});

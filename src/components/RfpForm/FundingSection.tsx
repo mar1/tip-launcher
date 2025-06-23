@@ -11,10 +11,13 @@ import { calculatePriceTotals, setTipValue } from "./data/price"
 import { currencyRate$ } from "@/services/currencyRate"
 import { FormInputField } from "./FormInputField"
 import { type TipControlType, type FormSchema, parseNumber } from "./formSchema"
+import { useFormContext } from "react-hook-form"
 
 export const FundingSection: FC<{ control: TipControlType }> = ({ control }) => {
   const tipAmount = useWatch({ control, name: "tipAmount" })
   const referralFeePercent = useWatch({ control, name: "referralFeePercent" })
+  const currencyRate = useStateObservable(currencyRate$)
+  const { setValue, getValues } = useFormContext<FormSchema>()
 
   // Calculate referral fee amount from percentage
   const referralFeeAmount = useMemo(() => {
@@ -22,6 +25,19 @@ export const FundingSection: FC<{ control: TipControlType }> = ({ control }) => 
     const feePercent = parseNumber(referralFeePercent) || 0
     return (tipAmountValue * feePercent) / 100
   }, [tipAmount, referralFeePercent])
+
+  // Track selection logic (automated)
+  const tipAmountValue = parseNumber(tipAmount) || 0
+  const tipAmountKSM = currencyRate ? tipAmountValue / currencyRate : 0
+  let autoTrack: "small_tipper" | "big_tipper" = "small_tipper"
+  if (tipAmountKSM > 8.25) autoTrack = "big_tipper"
+  // If tipAmountKSM > 33.33, it's too big, but still default to big_tipper for now
+
+  // Set tipperTrack automatically whenever tipAmountKSM changes
+  useEffect(() => {
+    setValue("tipperTrack", autoTrack)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoTrack])
 
   return (
     <div className="poster-card">

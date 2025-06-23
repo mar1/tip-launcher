@@ -246,6 +246,13 @@ const SubmitModalContent = () => {
   const activeTxStep = useStateObservable(activeTxStep$)
   const refIdx = useStateObservable(referendumIndex$)
 
+  // Debugging output
+  console.log("[SubmitModalContent] activeTxStep:", activeTxStep)
+  if (activeTxStep && activeTxStep.type === "tx") {
+    console.log("[SubmitModalContent] tag:", activeTxStep.tag)
+    console.log("[SubmitModalContent] value:", activeTxStep.value)
+  }
+
   if (!activeTxStep) return null
 
   if (activeTxStep.type === "tx") {
@@ -264,8 +271,10 @@ const SubmitModalContent = () => {
             <StepSubmitTx explanation={activeTxStep.value.explanation} submit={submitdecisionDeposit} />
           </div>
         )
+      default:
+        console.error("[SubmitModalContent] Unknown tx step tag:", activeTxStep.tag, activeTxStep)
+        return <div style={{ color: 'red' }}>Error: Unknown transaction step tag: {String(activeTxStep.tag)}</div>
     }
-    return null
   }
 
   if (activeTxStep.type === "submitting" || !activeTxStep.value.txEvent.ok) {

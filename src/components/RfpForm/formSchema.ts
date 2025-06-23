@@ -13,6 +13,9 @@ export const formSchema = z.object({
   tipAmount: z.coerce.number().min(0, "Tip amount must be a positive number"),
   referralFeePercent: z.coerce.number().min(0).max(100).optional(),
 
+  // Track selection
+  tipperTrack: z.enum(["small_tipper", "big_tipper"], { required_error: "Select a tipper track" }),
+
   // Beneficiaries
   tipBeneficiary: requiredString,
   referral: optionalAddress,

@@ -5,14 +5,19 @@ import { MultiAddress } from "@polkadot-api/descriptors";
 import { state } from "@react-rxjs/core";
 import { combineLatest, from, of, switchMap, map } from "rxjs";
 import { tipValue$ } from "./price";
-import { decisionDeposit, referendaSdk, submissionDeposit } from "./referendaConstants";
+import {
+  decisionDeposit,
+  referendaSdk,
+} from "./referendaConstants";
+import { Binary } from "@polkadot-api/substrate-bindings";
 
 const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 
-const depositCosts$ = combineLatest([
-  submissionDeposit,
-  tipValue$.pipe(switchMap((v) => decisionDeposit(v ? BigInt(Math.round(v * 10 ** TOKEN_DECIMALS)) : null))),
-]).pipe(map((r) => r.reduce(sum, 0n)));
+const depositCosts$ = tipValue$.pipe(
+  switchMap((v) =>
+    decisionDeposit(v ? BigInt(Math.round(v * 10 ** TOKEN_DECIMALS)) : null)
+  )
+);
 
 // Create estimatedCost$ that only includes deposits for now
 // Fees will be calculated separately when we have form data
@@ -30,29 +35,19 @@ export const calculateFees = (formData: { tipAmount: number; referralFeePercent?
 
   const tipAmountValue = BigInt(Math.round(formData.tipAmount * 10 ** TOKEN_DECIMALS));
 
-  // The native asset is the asset at location {"parents":0,"interior":"Here"}
-  const NATIVE_ASSET_V3 = {
-    V3: {
-      id: { Concrete: { parents: 0, interior: { Here: null } } },
-      fun: { Fungible: 0n },
-    },
-  };
-
-  const tipCall = typedApi.tx.Treasury.spend({
+  const tipCall = typedApi.tx.Treasury.spend_local({
     amount: tipAmountValue,
     beneficiary: MultiAddress.Id(formData.tipBeneficiary),
-    asset_kind: NATIVE_ASSET_V3,
   });
 
-  let finalCall = tipCall;
+  let finalCall: any = tipCall;
   let totalValue = tipAmountValue;
 
   if (formData.referralFeePercent && formData.referral) {
     const referralFeeAmount = (tipAmountValue * BigInt(formData.referralFeePercent)) / 100n;
-    const referralFeeCall = typedApi.tx.Treasury.spend({
+    const referralFeeCall = typedApi.tx.Treasury.spend_local({
       amount: referralFeeAmount,
       beneficiary: MultiAddress.Id(formData.referral),
-      asset_kind: NATIVE_ASSET_V3,
     });
     finalCall = typedApi.tx.Utility.batch_all({
       calls: [tipCall.decodedCall, referralFeeCall.decodedCall],
@@ -61,8 +56,12 @@ export const calculateFees = (formData: { tipAmount: number; referralFeePercent?
   }
 
   return from(
-    finalCall.getEncodedData().then((callData) => referendaSdk.createSpenderReferenda(callData, totalValue))
+    finalCall
+      .getEncodedData()
+      .then((callData: Uint8Array) =>
+        referendaSdk.createSpenderReferenda(new Binary(callData), totalValue)
+      )
   ).pipe(
-    switchMap((tx) => (tx ? from(tx.getEstimatedFees(ALICE)) : of(0n)))
+    switchMap((tx: any) => (tx ? from(tx.getEstimatedFees(ALICE)) : of(0n)))
   );
 };
