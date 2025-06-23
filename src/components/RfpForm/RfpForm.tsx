@@ -39,7 +39,6 @@ export const [formController$, setFormController] = createSignal<any>()
 
 export const TipForm = () => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
-  const [isReturnFundsAgreed, setIsReturnFundsAgreed] = useState(false)
 
   const estimatedCost = useStateObservable(estimatedCost$)
   const currentBalance = useStateObservable(signerBalance$)
@@ -112,7 +111,6 @@ export const TipForm = () => {
   const handleResetForm = () => {
     if (!confirm("Are you sure you want to reset the form? This will clear all your progress.")) return
     Object.entries(defaultValues).forEach(([key, value]) => form.setValue(key as keyof FormSchema, value as any))
-    setIsReturnFundsAgreed(false)
     setCurrentStepIndex(0)
     window.scrollTo(0, 0)
   }
@@ -131,7 +129,6 @@ export const TipForm = () => {
   const isSubmitDisabled =
     hasErrors ||
     !isValid ||
-    (isReviewStep && !isReturnFundsAgreed) ||
     (isReviewStep && selectedAccount !== null && !hasSufficientBalanceForButton) ||
     (isReviewStep && (!allFormValues?.tipBeneficiary || !allFormValues?.referral))
 
