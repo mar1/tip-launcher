@@ -39,6 +39,7 @@ export const [formController$, setFormController] = createSignal<any>()
 
 export const TipForm = () => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
+  const [isTooBig, setIsTooBig] = useState(false)
 
   const estimatedCost = useStateObservable(estimatedCost$)
   const currentBalance = useStateObservable(signerBalance$)
@@ -152,7 +153,7 @@ export const TipForm = () => {
               />
             ) : (
               // @ts-ignore
-              <ActiveStepComponent control={control} onReset={handleResetForm} />
+              <ActiveStepComponent control={control} onReset={handleResetForm} onTooBigChange={setIsTooBig} />
             )}
           </div>
 
@@ -179,7 +180,7 @@ export const TipForm = () => {
 
               {/* Next/Submit Button Wrapper: Mobile order 1, Desktop order 3 */}
               <div className="w-full md:w-auto order-1 md:order-3">
-                {currentStepIndex < steps.length - 1 && (
+                {currentStepIndex < steps.length - 1 && !isTooBig && (
                   <button
                     type="button"
                     onClick={handleNext}

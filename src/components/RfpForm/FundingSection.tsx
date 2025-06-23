@@ -3,21 +3,29 @@
 import { formatToken, formatUsd } from "@/lib/formatToken"
 import { useStateObservable } from "@react-rxjs/core"
 import { TriangleAlert, CheckCircle2, Info } from "lucide-react"
-import { type FC, useEffect, useMemo } from "react"
+import { type FC, useEffect, useMemo, useState } from "react"
 import { useWatch, type DeepPartialSkipArrayKey } from "react-hook-form"
 import { openSelectAccount, selectedAccount$ } from "../SelectAccount"
-import { estimatedCost$, signerBalance$ } from "./data"
+import { estimatedCost$, signerBalance$, setTipperTrack } from "./data"
 import { calculatePriceTotals, setTipValue } from "./data/price"
 import { currencyRate$ } from "@/services/currencyRate"
 import { FormInputField } from "./FormInputField"
 import { type TipControlType, type FormSchema, parseNumber } from "./formSchema"
 import { useFormContext } from "react-hook-form"
+import { submissionDeposit, getTrack } from "./data/referendaConstants"
 
-export const FundingSection: FC<{ control: TipControlType }> = ({ control }) => {
+const ALICE_DUMMY = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+
+export const FundingSection: FC<{ control: TipControlType; onTooBigChange?: (isTooBig: boolean) => void }> = ({ control, onTooBigChange }) => {
   const tipAmount = useWatch({ control, name: "tipAmount" })
   const referralFeePercent = useWatch({ control, name: "referralFeePercent" })
+  const tipperTrack = useWatch({ control, name: "tipperTrack" })
+  const tipBeneficiary = useWatch({ control, name: "tipBeneficiary" })
+  const referral = useWatch({ control, name: "referral" })
   const currencyRate = useStateObservable(currencyRate$)
   const { setValue, getValues } = useFormContext<FormSchema>()
+  const [submissionDepositKSM, setSubmissionDepositKSM] = useState<string | null>(null)
+  const [trackDepositKSM, setTrackDepositKSM] = useState<string | null>(null)
 
   // Calculate referral fee amount from percentage
   const referralFeeAmount = useMemo(() => {
@@ -33,11 +41,39 @@ export const FundingSection: FC<{ control: TipControlType }> = ({ control }) => 
   if (tipAmountKSM > 8.25) autoTrack = "big_tipper"
   // If tipAmountKSM > 33.33, it's too big, but still default to big_tipper for now
 
+  const isTooBig = tipAmountKSM > 33.33
+
   // Set tipperTrack automatically whenever tipAmountKSM changes
   useEffect(() => {
     setValue("tipperTrack", autoTrack)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoTrack])
+
+  // Update the deposit calculation when tipper track changes
+  useEffect(() => {
+    if (tipperTrack) {
+      setTipperTrack(tipperTrack)
+    }
+  }, [tipperTrack])
+
+  useEffect(() => {
+    // submissionDeposit is a promise-like (from polkadot-api)
+    Promise.resolve(submissionDeposit).then((val) => {
+      setSubmissionDepositKSM(formatToken(val))
+    })
+  }, [])
+
+  useEffect(() => {
+    if (tipperTrack) {
+      getTrack(null, tipperTrack).then((trackInfo) => {
+        setTrackDepositKSM(formatToken(trackInfo.track.decision_deposit))
+      })
+    }
+  }, [tipperTrack])
+
+  useEffect(() => {
+    if (onTooBigChange) onTooBigChange(isTooBig)
+  }, [isTooBig, onTooBigChange])
 
   return (
     <div className="poster-card">
@@ -77,8 +113,12 @@ export const FundingSection: FC<{ control: TipControlType }> = ({ control }) => 
         </div>
       )}
 
+      {/* Deposit Display */}
+      {/* Removed as per user request */}
+
       <TipCategoryDisplay control={control} />
-      <BalanceCheck control={control} />
+      {/* Only show balance/deposit card if not too big */}
+      {!isTooBig && <BalanceCheck control={control} trackDepositKSM={trackDepositKSM} />}
     </div>
   )
 }
@@ -124,7 +164,7 @@ const TipCategoryDisplay: FC<{ control: TipControlType }> = ({ control }) => {
   )
 }
 
-const BalanceCheck: FC<{ control: TipControlType }> = ({ control }) => {
+const BalanceCheck: FC<{ control: TipControlType; trackDepositKSM: string | null }> = ({ control, trackDepositKSM }) => {
   const tipAmount = useWatch({ control, name: "tipAmount" })
   const referralFeePercent = useWatch({ control, name: "referralFeePercent" })
 
@@ -195,25 +235,7 @@ const BalanceCheck: FC<{ control: TipControlType }> = ({ control }) => {
   return (
     <div className="bg-canvas-cream border border-pine-shadow-20 rounded-lg p-6">
       <p className="text-pine-shadow leading-relaxed mb-4">
-        Please note that you'll need a minimum of{" "}
-        {tipAmountValue > 0 ? (
-          estimatedCost ? (
-            <strong className="text-midnight-koi font-semibold">
-              {formatToken(estimatedCost.deposits + estimatedCost.fees)}
-            </strong>
-          ) : (
-            <span className="text-pine-shadow-60">(calculating based on inputs…)</span>
-          )
-        ) : (
-          <span className="text-pine-shadow-60">(enter tip amount to see cost)</span>
-        )}
-        {tipAmountValue > 0 && estimatedCost && (
-          <>
-            {" "}
-            to submit the tip referendum ({formatToken(estimatedCost.fees)} in fees. You'll get{" "}
-            {formatToken(estimatedCost.deposits)} in deposits back once the referendum ends).
-          </>
-        )}
+        Please note that you'll need a minimum of {trackDepositKSM ?? '...'} to submit the tip referendum. (You'll get your deposit back once the referendum ends.)
       </p>
 
       {tipAmountValue > 0 && estimatedCost && renderSpecificBalanceMessages()}
