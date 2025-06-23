@@ -1,7 +1,6 @@
 import { typedApi } from "@/chain";
 import { formatToken } from "@/lib/formatToken";
 import { MultiAddress } from "@polkadot-api/descriptors";
-import { createReferendaSdk } from "@polkadot-api/sdk-governance";
 import { state } from "@react-rxjs/core";
 import { TOKEN_DECIMALS } from "@/constants";
 import {
@@ -16,9 +15,15 @@ import {
 import { dismissable, submittedFormData$ } from "../modalActions";
 import { createTxProcess } from "./txProcess";
 import { TxWithExplanation } from "./types";
-import { getTrack } from "@/components/RfpForm/data/referendaConstants";
+import type { Transaction } from "polkadot-api";
+import { Binary } from "polkadot-api";
+import { filter as rxFilter, map as rxMap } from "rxjs";
 
-const referendaSdk = createReferendaSdk(typedApi);
+// Add mapping for tipper track IDs
+const TIPPER_TRACK_IDS: Record<string, number> = {
+  small_tipper: 30,
+  big_tipper: 31,
+};
 
 export const referendumCreationTx$ = state(
   submittedFormData$.pipe(
@@ -37,44 +42,56 @@ export const referendumCreationTx$ = state(
       const getReferendumProposal = async (): Promise<TxWithExplanation> => {
         const tipAmountValue = BigInt(Math.round(formData.tipAmount * Math.pow(10, TOKEN_DECIMALS)));
 
-        // The native asset is the asset at location {"parents":0,"interior":"Here"}
-        const NATIVE_ASSET_V3 = {
-          V3: {
-            id: { Concrete: { parents: 0, interior: { Here: null } } },
-            fun: { Fungible: 0n },
-          },
-        };
-
-        const tipCall = typedApi.tx.Treasury.spend({
+        // Create spend_local call for the main beneficiary
+        const tipCall = typedApi.tx.Treasury.spend_local({
           amount: tipAmountValue,
           beneficiary: MultiAddress.Id(formData.tipBeneficiary),
-          asset_kind: NATIVE_ASSET_V3,
         });
 
-        let finalCall = tipCall;
+        let calls = [tipCall];
         let totalValue = tipAmountValue;
 
+        // If referral is present, add a spend_local call for the referral
         if (formData.referralFeePercent && formData.referral) {
           const referralFeeAmount = (tipAmountValue * BigInt(formData.referralFeePercent)) / 100n;
-          const referralFeeCall = typedApi.tx.Treasury.spend({
+          const referralFeeCall = typedApi.tx.Treasury.spend_local({
             amount: referralFeeAmount,
             beneficiary: MultiAddress.Id(formData.referral),
-            asset_kind: NATIVE_ASSET_V3,
           });
-          finalCall = typedApi.tx.Utility.batch_all({
-            calls: [tipCall.decodedCall, referralFeeCall.decodedCall],
-          });
+          calls.push(referralFeeCall);
           totalValue += referralFeeAmount;
         }
 
-        // Use createSpenderReferenda instead of createReferenda
-        const spenderReferenda = await referendaSdk.createSpenderReferenda(
-          await finalCall.getEncodedData(),
-          totalValue
-        );
+        // Batch the calls
+        const batchCall = typedApi.tx.Utility.batch_all({
+          calls: calls.map((c) => c.decodedCall),
+        });
+
+        // Hardcode the track ID for tipper referenda
+        const trackId = TIPPER_TRACK_IDS[formData.tipperTrack];
+        if (trackId === undefined) throw new Error("Unknown tipper track: " + formData.tipperTrack);
+
+        const callData = await batchCall.getEncodedData();
+
+        // Prepare the origin for OpenGov
+        let origin;
+        if (formData.tipperTrack === "small_tipper") {
+          origin = { type: "Origins" as const, value: { type: "SmallTipper" as const, value: undefined } };
+        } else if (formData.tipperTrack === "big_tipper") {
+          origin = { type: "Origins" as const, value: { type: "BigTipper" as const, value: undefined } };
+        } else {
+          throw new Error("Unknown tipper track: " + formData.tipperTrack);
+        }
+
+        // Create the referenda transaction using the regular API
+        const referendumTx = typedApi.tx.Referenda.submit({
+          proposal_origin: origin,
+          proposal: { type: "Inline", value: callData },
+          enactment_moment: { type: "At", value: 0 },
+        });
 
         return {
-          tx: spenderReferenda,
+          tx: referendumTx,
           explanation: {
             text: "Tip referendum proposal",
             params: {
@@ -82,73 +99,65 @@ export const referendumCreationTx$ = state(
               amount: formatToken(tipAmountValue),
               referral: formData.referral || "None",
               referralFee: formData.referralFeePercent ? `${formData.referralFeePercent}%` : "None",
+              track: formData.tipperTrack,
+              trackId: String(trackId),
             },
           },
         };
       };
 
-      const proposal = getReferendumProposal();
-      const proposalCallData = proposal.then((r) => r.tx.getEncodedData());
-      const proposalTxExplanation = proposal.then((r) => r.explanation);
-
+      // Await the proposal and use the resolved value directly
       return combineLatest([
-        proposalCallData,
-        proposalTxExplanation,
         amount$,
-        getTrack(BigInt(Math.round(formData.tipAmount * Math.pow(10, TOKEN_DECIMALS)))),
       ]).pipe(
-        map(
-          ([
-            proposal,
-            proposalExplanation,
-            amount,
-            track,
-          ]) => {
-            const calls: TxWithExplanation[] = [];
+        switchMap(async ([amount]) => {
+          const proposal = await getReferendumProposal();
+          const calls: TxWithExplanation[] = [];
 
-            if (amount > 0) {
-              calls.push({
-                tx: typedApi.tx.Balances.transfer_keep_alive({
-                  dest: MultiAddress.Id(tipRecipientAddr),
-                  value: amount,
-                }),
-                explanation: {
-                  text: "Transfer balance to tip recipient",
-                  params: {
-                    destination: tipRecipientAddr,
-                    value: formatToken(amount),
-                  },
-                },
-              });
-            }
-
+          if (amount > 0) {
             calls.push({
-              tx: referendaSdk.createReferenda(track.origin, proposal),
+              tx: typedApi.tx.Balances.transfer_keep_alive({
+                dest: MultiAddress.Id(tipRecipientAddr),
+                value: amount,
+              }),
               explanation: {
-                text: "Create tip referendum",
+                text: "Transfer balance to tip recipient",
                 params: {
-                  track: formatTrackName(track.track.name),
-                  call: proposalExplanation,
+                  destination: tipRecipientAddr,
+                  value: formatToken(amount),
                 },
               },
             });
-
-            if (calls.length > 1) {
-              return {
-                tx: typedApi.tx.Utility.batch_all({
-                  calls: calls.map((c) => c.tx.decodedCall),
-                }),
-                explanation: {
-                  text: "batch",
-                  params: Object.fromEntries(
-                    calls.map((v, i) => [i, v.explanation])
-                  ),
-                },
-              };
-            }
-            return calls[0];
           }
-        ),
+
+          // Add the referendum submission
+          calls.push({
+            tx: proposal.tx,
+            explanation: {
+              text: "Create tip referendum",
+              params: {
+                track: formData.tipperTrack,
+                trackId: String(TIPPER_TRACK_IDS[formData.tipperTrack]),
+                call: proposal.explanation,
+              },
+            },
+          });
+
+          if (calls.length > 1) {
+            return {
+              tx: typedApi.tx.Utility.batch_all({
+                calls: calls.map((c) => c.tx.decodedCall),
+              }),
+              explanation: {
+                text: "batch",
+                params: Object.fromEntries(
+                  calls.map((v, i) => [i, v.explanation])
+                ),
+              },
+            };
+          }
+          return calls[0];
+        }),
         dismissable()
       );
     })
@@ -161,15 +170,33 @@ const formatTrackName = (track: string) => track.replace(/_/g, " ");
 export const [referendumCreationProcess$, submitReferendumCreation] =
   createTxProcess(referendumCreationTx$.pipe(map((v) => v?.tx ?? null)));
 
-export const tipReferendum$ = state(
+// Expose the referendum index from the finalized event
+export const referendumIndex$ = state(
   referendumCreationProcess$.pipe(
-    filter((v) => v?.type === "finalized" && v.ok),
-    switchMap(async (v) => {
-      const referendum = referendaSdk.getSubmittedReferendum(v);
-      if (!referendum) {
-        throw new Error("Submitted referendum could not be found");
+    rxFilter((evt) => {
+      const isFinalized = !!evt && evt.type === "finalized" && evt.ok && Array.isArray((evt as any).events);
+      if (evt) {
+        console.log("[referendumIndex$] process evt:", evt, "isFinalized:", isFinalized);
       }
-      return referendum;
+      return isFinalized;
+    }),
+    rxMap((evt) => {
+      const events = (evt as any).events;
+      console.log("[referendumIndex$] all events:", events);
+      const event = events.find((e: any) =>
+        e.section === "referenda" &&
+        (e.method === "Submitted" || e.method === "ReferendumSubmitted")
+      );
+      console.log("[referendumIndex$] found event:", event);
+      return event ? event.data[0] : null;
+    }),
+    rxFilter((index) => {
+      const valid = typeof index === "number" && !isNaN(index);
+      if (!valid) {
+        console.log("[referendumIndex$] index not valid:", index);
+      }
+      return valid;
     })
-  )
+  ),
+  null
 );
