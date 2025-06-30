@@ -22,8 +22,8 @@ export const BeneficiariesSection: FC<{ control: TipControlType }> = ({ control 
     <div className="poster-card">
       <h3 className="text-3xl font-medium mb-8 text-midnight-koi">Recipients</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <FormInputField control={control} name="tipBeneficiary" label="Tip Recipient" description="who will receive the tip" />
-        <FormInputField control={control} name="referral" label="Referral" description="who will receive the referral fee" />
+        <FormInputField control={control} name="tipBeneficiary" label="Tip Recipient" description="who will receive the tip" placeholder="Enter recipient KSM address" />
+        <FormInputField control={control} name="referral" label="Referral" description="who will receive the referral fee" placeholder="Enter tipper's KSM address" />
       </div>
     </div>
   )
