@@ -141,6 +141,14 @@ const FundingSummary: FC<{
   const referralFeePercent = parseNumber(formFields.referralFeePercent) || 0
   const referralFeeAmount = (tipAmount * referralFeePercent) / 100
 
+  // Calculate KSM values for tip and referral
+  let tipKsm = 0
+  let referralKsm = 0
+  if (currencyRate) {
+    tipKsm = tipAmount / currencyRate
+    referralKsm = referralFeeAmount / currencyRate
+  }
+
   return (
     <div className="bg-canvas-cream border border-lake-haze rounded-lg p-6">
       <h4 className="flex items-center gap-2 text-lg font-medium text-midnight-koi mb-4">
@@ -163,6 +171,19 @@ const FundingSummary: FC<{
               <span className="text-xl font-bold text-midnight-koi tabular-nums">{ksmValueDisplay}</span>
               {ksmUnitDisplay && <span className="text-xs text-pine-shadow-60">{ksmUnitDisplay}</span>}
             </div>
+          </div>
+        </div>
+
+        {/* KSM Distribution Breakdown */}
+        <div className="mt-2 text-xs text-pine-shadow-60 tabular-nums">
+          <div className="text-xs font-medium text-pine-shadow-60 uppercase tracking-wide mb-1">Distributed as:</div>
+          <div className="flex justify-between">
+            <span>Tip Recipient:</span>
+            <span>{tipKsm.toLocaleString(undefined, { maximumFractionDigits: 4 })} {TOKEN_SYMBOL}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Referral:</span>
+            <span>{referralKsm.toLocaleString(undefined, { maximumFractionDigits: 4 })} {TOKEN_SYMBOL}</span>
           </div>
         </div>
 

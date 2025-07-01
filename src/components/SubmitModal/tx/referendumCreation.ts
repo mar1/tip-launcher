@@ -18,6 +18,7 @@ import { TxWithExplanation } from "./types";
 import type { Transaction } from "polkadot-api";
 import { Binary } from "polkadot-api";
 import { filter as rxFilter, map as rxMap } from "rxjs";
+import { currencyRate$ } from "@/services/currencyRate";
 
 // Add mapping for tipper track IDs
 const TIPPER_TRACK_IDS: Record<string, number> = {
@@ -40,7 +41,17 @@ export const referendumCreationTx$ = state(
       }));
 
       const getReferendumProposal = async (): Promise<TxWithExplanation> => {
-        const tipAmountValue = BigInt(Math.round(formData.tipAmount * Math.pow(10, TOKEN_DECIMALS)));
+        // Convert USD to KSM using the current rate
+        const currencyRate = currencyRate$.getValue(); // USD per KSM
+        const tipAmountKSM = currencyRate ? formData.tipAmount / currencyRate : 0;
+        const tipAmountValue = BigInt(Math.round(tipAmountKSM * Math.pow(10, TOKEN_DECIMALS)));
+
+        // Calculate referral fee in KSM
+        let referralFeeAmount = 0n;
+        if (formData.referralFeePercent && formData.referral) {
+          referralFeeAmount = (tipAmountValue * BigInt(formData.referralFeePercent)) / 100n;
+        }
+        const totalValue = tipAmountValue + referralFeeAmount;
 
         // Create spend_local call for the main beneficiary
         const tipCall = typedApi.tx.Treasury.spend_local({
@@ -49,17 +60,14 @@ export const referendumCreationTx$ = state(
         });
 
         let calls = [tipCall];
-        let totalValue = tipAmountValue;
 
         // If referral is present, add a spend_local call for the referral
         if (formData.referralFeePercent && formData.referral) {
-          const referralFeeAmount = (tipAmountValue * BigInt(formData.referralFeePercent)) / 100n;
           const referralFeeCall = typedApi.tx.Treasury.spend_local({
             amount: referralFeeAmount,
             beneficiary: MultiAddress.Id(formData.referral),
           });
           calls.push(referralFeeCall);
-          totalValue += referralFeeAmount;
         }
 
         // Batch the calls
@@ -96,7 +104,7 @@ export const referendumCreationTx$ = state(
             text: "Tip referendum proposal",
             params: {
               tipRecipient: formData.tipBeneficiary,
-              amount: formatToken(tipAmountValue),
+              amount: formatToken(totalValue),
               referral: formData.referral || "None",
               referralFee: formData.referralFeePercent ? `${formData.referralFeePercent}%` : "None",
               track: formData.tipperTrack,
@@ -183,12 +191,20 @@ export const referendumIndex$ = state(
     rxMap((evt) => {
       const events = (evt as any).events;
       console.log("[referendumIndex$] all events:", events);
-      const event = events.find((e: any) =>
-        e.section === "referenda" &&
-        (e.method === "Submitted" || e.method === "ReferendumSubmitted")
+      const event = events.find(
+        (e: any) =>
+          e.type === "Referenda" &&
+          e.value &&
+          e.value.type === "Submitted" &&
+          e.value.value &&
+          typeof e.value.value.index === "number"
       );
       console.log("[referendumIndex$] found event:", event);
-      return event ? event.data[0] : null;
+      const index = event ? event.value.value.index : null;
+      if (!index) {
+        console.log("[referendumIndex$] index not valid:", index);
+      }
+      return index;
     }),
     rxFilter((index) => {
       const valid = typeof index === "number" && !isNaN(index);
