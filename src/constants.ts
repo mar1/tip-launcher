@@ -1,7 +1,34 @@
 export const BLOCK_LENGTH = 6
-export const KRAKEN_SYMBOL_PAIR = "KSMUSD"
-export const TOKEN_SYMBOL = "KSM"
-export const TOKEN_DECIMALS = 12
+
+// Chain configurations
+export const CHAINS = {
+  KSM: {
+    symbol: "KSM",
+    decimals: 12,
+    krakenPair: "KSMUSD",
+    smallTipperLimit: 8.25, // KSM
+    bigTipperLimit: 33.33, // KSM
+    name: "Kusama",
+    color: "#E6007A"
+  },
+  DOT: {
+    symbol: "DOT",
+    decimals: 10,
+    krakenPair: "DOTUSD",
+    smallTipperLimit: 250, // DOT
+    bigTipperLimit: 1000, // DOT
+    name: "Polkadot",
+    color: "#E6007A"
+  }
+} as const
+
+export type ChainType = keyof typeof CHAINS
+
+// Legacy constants for backward compatibility
+export const KRAKEN_SYMBOL_PAIR = CHAINS.KSM.krakenPair
+export const TOKEN_SYMBOL = CHAINS.KSM.symbol
+export const TOKEN_DECIMALS = CHAINS.KSM.decimals
+
 export const CHOPSTICKS_URL = `http://localhost:8133`
 
 // Light client disabled while https://github.com/paritytech/litep2p/pull/393, which can cause transactions through smoldot to not get included in blocks.

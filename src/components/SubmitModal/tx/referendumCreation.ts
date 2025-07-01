@@ -2,7 +2,7 @@ import { typedApi } from "@/chain";
 import { formatToken } from "@/lib/formatToken";
 import { MultiAddress } from "@polkadot-api/descriptors";
 import { state } from "@react-rxjs/core";
-import { TOKEN_DECIMALS } from "@/constants";
+import { CHAINS, type ChainType } from "@/constants";
 import {
   combineLatest,
   filter,
@@ -19,6 +19,7 @@ import type { Transaction } from "polkadot-api";
 import { Binary } from "polkadot-api";
 import { filter as rxFilter, map as rxMap } from "rxjs";
 import { currencyRate$ } from "@/services/currencyRate";
+import { selectedChain$ } from "@/components/ChainSelector/chain.state";
 
 // Add mapping for tipper track IDs
 const TIPPER_TRACK_IDS: Record<string, number> = {
@@ -41,10 +42,13 @@ export const referendumCreationTx$ = state(
       }));
 
       const getReferendumProposal = async (): Promise<TxWithExplanation> => {
+        const selectedChain = selectedChain$.getValue() as ChainType;
+        const chainConfig = CHAINS[selectedChain];
+
         // Convert USD to KSM using the current rate
         const currencyRate = currencyRate$.getValue(); // USD per KSM
         const tipAmountKSM = currencyRate ? formData.tipAmount / currencyRate : 0;
-        const tipAmountValue = BigInt(Math.round(tipAmountKSM * Math.pow(10, TOKEN_DECIMALS)));
+        const tipAmountValue = BigInt(Math.round(tipAmountKSM * Math.pow(10, chainConfig.decimals)));
 
         // Calculate referral fee in KSM
         let referralFeeAmount = 0n;
@@ -216,3 +220,4 @@ export const referendumIndex$ = state(
   ),
   null
 );
+

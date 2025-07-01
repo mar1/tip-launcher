@@ -1,7 +1,7 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useForm, FormProvider } from "react-hook-form"
 import { SubmitModal } from "../SubmitModal"
 import { submit } from "../SubmitModal/modalActions"
@@ -17,6 +17,7 @@ import { estimatedCost$, signerBalance$ } from "./data"
 import { selectedAccount$ } from "@/components/SelectAccount"
 import { useStateObservable } from "@react-rxjs/core"
 import { createSignal } from "@react-rxjs/utils"
+import { selectedChain$ } from "../ChainSelector/chain.state"
 
 const defaultValues: Partial<FormSchema> = {
   tipTitle: "",
@@ -40,6 +41,7 @@ export const [formController$, setFormController] = createSignal<any>()
 export const TipForm = () => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [isTooBig, setIsTooBig] = useState(false)
+  const prevChain = useRef<string | null>(null)
 
   const estimatedCost = useStateObservable(estimatedCost$)
   const currentBalance = useStateObservable(signerBalance$)
@@ -90,6 +92,21 @@ export const TipForm = () => {
     })
     return () => subscription.unsubscribe()
   }, [watch])
+
+  useEffect(() => {
+    const sub = selectedChain$.subscribe((chain) => {
+      if (prevChain.current !== null && prevChain.current !== chain) {
+        // Chain changed, reset form and go to first step
+        Object.entries(defaultValues).forEach(([key, value]) =>
+          form.setValue(key as keyof FormSchema, value as any)
+        )
+        setCurrentStepIndex(0)
+        window.scrollTo(0, 0)
+      }
+      prevChain.current = chain
+    })
+    return () => sub.unsubscribe()
+  }, [form])
 
   const navigateToStepById = (stepId: string) => {
     const stepIndex = steps.findIndex((step) => step.id === stepId)

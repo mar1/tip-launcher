@@ -1,11 +1,28 @@
-import { TOKEN_DECIMALS, TOKEN_SYMBOL } from "@/constants";
+import { CHAINS, type ChainType } from "@/constants";
+import { selectedChain$ } from "@/components/ChainSelector/chain.state";
 
+// Legacy function for backward compatibility
 export const formatToken = (value: bigint | null | undefined) => {
   if (value == null) return "";
 
-  return `${(Number(value) / 10 ** TOKEN_DECIMALS).toLocaleString(undefined, {
+  // Get current chain configuration
+  const currentChain = selectedChain$.getValue() as ChainType;
+  const chainConfig = CHAINS[currentChain];
+
+  return `${(Number(value) / 10 ** chainConfig.decimals).toLocaleString(undefined, {
     maximumFractionDigits: 4,
-  })} ${TOKEN_SYMBOL}`;
+  })} ${chainConfig.symbol}`;
+};
+
+// New chain-aware format function
+export const formatTokenForChain = (value: bigint | null | undefined, chainType: ChainType) => {
+  if (value == null) return "";
+
+  const chainConfig = CHAINS[chainType];
+
+  return `${(Number(value) / 10 ** chainConfig.decimals).toLocaleString(undefined, {
+    maximumFractionDigits: 4,
+  })} ${chainConfig.symbol}`;
 };
 
 export const formatCurrency = (

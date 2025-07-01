@@ -1,6 +1,7 @@
 import { USE_CHOPSTICKS } from "@/chain"
 import { ChopsticksController } from "./ChopsticksController"
 import { SelectAccount } from "./SelectAccount"
+import { ChainSelector } from "./ChainSelector"
 
 export const Header = () => {
   return (
@@ -20,8 +21,8 @@ export const Header = () => {
         </div>
 
         <div className="poster-actions">
+          <ChainSelector />
           <SelectAccount />
-          <div className="kusama-stamp">KUSAMA</div>
           {USE_CHOPSTICKS && <ChopsticksController />}
         </div>
       </div>

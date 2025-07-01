@@ -13,6 +13,8 @@ import { FormInputField } from "./FormInputField"
 import { type TipControlType, type FormSchema, parseNumber } from "./formSchema"
 import { useFormContext } from "react-hook-form"
 import { submissionDeposit, getTrack } from "./data/referendaConstants"
+import { CHAINS } from "@/constants"
+import { selectedChain$ } from "../ChainSelector/chain.state"
 
 const ALICE_DUMMY = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 
@@ -23,9 +25,12 @@ export const FundingSection: FC<{ control: TipControlType; onTooBigChange?: (isT
   const tipBeneficiary = useWatch({ control, name: "tipBeneficiary" })
   const referral = useWatch({ control, name: "referral" })
   const currencyRate = useStateObservable(currencyRate$)
+  const selectedChain = useStateObservable(selectedChain$)
   const { setValue, getValues } = useFormContext<FormSchema>()
   const [submissionDepositKSM, setSubmissionDepositKSM] = useState<string | null>(null)
   const [trackDepositKSM, setTrackDepositKSM] = useState<string | null>(null)
+
+  const chainConfig = CHAINS[selectedChain]
 
   // Calculate referral fee amount from percentage
   const referralFeeAmount = useMemo(() => {
@@ -34,16 +39,16 @@ export const FundingSection: FC<{ control: TipControlType; onTooBigChange?: (isT
     return (tipAmountValue * feePercent) / 100
   }, [tipAmount, referralFeePercent])
 
-  // Track selection logic (automated)
+  // Track selection logic (automated) - now chain-specific
   const tipAmountValue = parseNumber(tipAmount) || 0
-  const tipAmountKSM = currencyRate ? tipAmountValue / currencyRate : 0
+  const tipAmountToken = currencyRate ? tipAmountValue / currencyRate : 0
   let autoTrack: "small_tipper" | "big_tipper" = "small_tipper"
-  if (tipAmountKSM > 8.25) autoTrack = "big_tipper"
-  // If tipAmountKSM > 33.33, it's too big, but still default to big_tipper for now
+  if (tipAmountToken > chainConfig.smallTipperLimit) autoTrack = "big_tipper"
+  // If tipAmountToken > chainConfig.bigTipperLimit, it's too big, but still default to big_tipper for now
 
-  const isTooBig = tipAmountKSM > 33.33
+  const isTooBig = tipAmountToken > chainConfig.bigTipperLimit
 
-  // Set tipperTrack automatically whenever tipAmountKSM changes
+  // Set tipperTrack automatically whenever tipAmountToken changes
   useEffect(() => {
     setValue("tipperTrack", autoTrack)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -126,6 +131,8 @@ export const FundingSection: FC<{ control: TipControlType; onTooBigChange?: (isT
 const TipCategoryDisplay: FC<{ control: TipControlType }> = ({ control }) => {
   const tipAmount = useWatch({ control, name: "tipAmount" })
   const currencyRate = useStateObservable(currencyRate$)
+  const selectedChain = useStateObservable(selectedChain$)
+  const chainConfig = CHAINS[selectedChain]
 
   const tipCategory = useMemo(() => {
     const tipAmountValue = parseNumber(tipAmount) || 0
@@ -134,16 +141,16 @@ const TipCategoryDisplay: FC<{ control: TipControlType }> = ({ control }) => {
       return null
     }
 
-    const tipAmountKSM = tipAmountValue / currencyRate
+    const tipAmountToken = tipAmountValue / currencyRate
 
-    if (tipAmountKSM <= 8.25) {
+    if (tipAmountToken <= chainConfig.smallTipperLimit) {
       return { category: "Small Tipper", color: "text-lilypad" }
-    } else if (tipAmountKSM <= 33.33) {
+    } else if (tipAmountToken <= chainConfig.bigTipperLimit) {
       return { category: "Big Tipper", color: "text-sun-bleach" }
     } else {
       return { category: "Too big for a tip request", color: "text-tomato-stamp" }
     }
-  }, [tipAmount, currencyRate])
+  }, [tipAmount, currencyRate, chainConfig])
 
   if (!tipCategory) {
     return null
@@ -172,6 +179,8 @@ const BalanceCheck: FC<{ control: TipControlType; trackDepositKSM: string | null
   const estimatedCost = useStateObservable(estimatedCost$)
   const selectedAccount = useStateObservable(selectedAccount$)
   const currentBalance = useStateObservable(signerBalance$)
+  const selectedChain = useStateObservable(selectedChain$)
+  const chainConfig = CHAINS[selectedChain]
 
   useEffect(() => {
     const formValuesForTotals: DeepPartialSkipArrayKey<FormSchema> = {
@@ -235,7 +244,7 @@ const BalanceCheck: FC<{ control: TipControlType; trackDepositKSM: string | null
   return (
     <div className="bg-canvas-cream border border-pine-shadow-20 rounded-lg p-6">
       <p className="text-pine-shadow leading-relaxed mb-4">
-        Please note that you'll need a minimum of {trackDepositKSM ?? '...'} to submit the tip referendum. (You'll get your deposit back once the referendum ends.)
+        Please note that you'll need a minimum of {trackDepositKSM ?? '...'} {chainConfig.symbol} to submit the tip referendum. (You'll get your deposit back once the referendum ends.)
       </p>
 
       {tipAmountValue > 0 && estimatedCost && renderSpecificBalanceMessages()}

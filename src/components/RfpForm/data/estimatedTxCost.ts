@@ -11,6 +11,8 @@ import {
 } from "./referendaConstants";
 import { Binary } from "@polkadot-api/substrate-bindings";
 import { createSignal } from "@react-rxjs/utils";
+import { CHAINS, type ChainType } from "@/constants";
+import { selectedChain$ } from "@/components/ChainSelector/chain.state";
 
 const ALICE = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 
@@ -28,9 +30,28 @@ const depositCosts$ = combineLatest([tipValue$, tipperTrack$]).pipe(
 
 // Create estimatedCost$ that only includes deposits for now
 export const estimatedCost$ = state(
-  combineLatest({
-    deposits: depositCosts$,
-    fees: of(0n),
-  }),
-  null,
+  combineLatest([tipValue$, selectedChain$]).pipe(
+    map(([tipValue, selectedChain]) => {
+      const chainConfig = CHAINS[selectedChain as ChainType];
+      const planckValue = tipValue ? BigInt(Math.round(tipValue * 10 ** chainConfig.decimals)) : null;
+
+      if (!planckValue) {
+        return {
+          deposits: 0n,
+          fees: 0n,
+        };
+      }
+
+      // This is a simplified calculation - in a real implementation,
+      // you would calculate actual fees based on the transaction size
+      const estimatedFee = BigInt(Math.round(0.01 * 10 ** chainConfig.decimals)); // 0.01 token fee
+      const submissionDeposit = BigInt(Math.round(1.5 * 10 ** chainConfig.decimals)); // 1.5 token deposit
+
+      return {
+        deposits: submissionDeposit,
+        fees: estimatedFee,
+      };
+    })
+  ),
+  null
 );

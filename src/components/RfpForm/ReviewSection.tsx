@@ -1,6 +1,6 @@
 "use client"
 
-import { TOKEN_SYMBOL } from "@/constants"
+import { CHAINS } from "@/constants"
 import { formatCurrency, formatToken, formatUsd } from "@/lib/formatToken"
 import { getPublicKey, sliceMiddleAddr } from "@/lib/ss58"
 import { currencyRate$ } from "@/services/currencyRate"
@@ -27,6 +27,7 @@ import { generateMarkdown } from "./data/markdown"
 import { MarkdownPreview } from "./MarkdownPreview"
 import { parseNumber, type TipControlType } from "./formSchema"
 import { selectedAccount$ } from "../SelectAccount"
+import { selectedChain$ } from "../ChainSelector/chain.state"
 
 interface ReviewSectionProps {
   control: TipControlType
@@ -108,29 +109,31 @@ const FundingSummary: FC<{
 }> = ({ control }) => {
   const formFields = useWatch({ control })
   const currencyRate = useStateObservable(currencyRate$)
+  const selectedChain = useStateObservable(selectedChain$)
+  const chainConfig = CHAINS[selectedChain]
   const { totalAmountToken } = calculatePriceTotals(formFields)
 
   useEffect(() => {
     setTipValue(totalAmountToken)
   }, [totalAmountToken])
 
-  const formattedKsmString = formatCurrency(totalAmountToken, TOKEN_SYMBOL, 2)
-  let ksmValueDisplay = "Calculating..."
-  let ksmUnitDisplay = ""
+  const formattedTokenString = formatCurrency(totalAmountToken, chainConfig.symbol, 2)
+  let tokenValueDisplay = "Calculating..."
+  let tokenUnitDisplay = ""
 
-  if (totalAmountToken != null && formattedKsmString) {
-    const parts = formattedKsmString.split(" ")
+  if (totalAmountToken != null && formattedTokenString) {
+    const parts = formattedTokenString.split(" ")
     if (parts.length >= 1) {
-      ksmValueDisplay = parts[0]
+      tokenValueDisplay = parts[0]
       if (parts.length >= 2) {
-        ksmUnitDisplay = parts[1]
+        tokenUnitDisplay = parts[1]
       } else {
-        const symbolIndex = ksmValueDisplay.indexOf(TOKEN_SYMBOL)
-        if (symbolIndex > -1 && ksmValueDisplay.endsWith(TOKEN_SYMBOL)) {
-          ksmUnitDisplay = TOKEN_SYMBOL
-          ksmValueDisplay = ksmValueDisplay.substring(0, symbolIndex).trim()
+        const symbolIndex = tokenValueDisplay.indexOf(chainConfig.symbol)
+        if (symbolIndex > -1 && tokenValueDisplay.endsWith(chainConfig.symbol)) {
+          tokenUnitDisplay = chainConfig.symbol
+          tokenValueDisplay = tokenValueDisplay.substring(0, symbolIndex).trim()
         } else {
-          ksmUnitDisplay = TOKEN_SYMBOL
+          tokenUnitDisplay = chainConfig.symbol
         }
       }
     }
@@ -141,12 +144,12 @@ const FundingSummary: FC<{
   const referralFeePercent = parseNumber(formFields.referralFeePercent) || 0
   const referralFeeAmount = (tipAmount * referralFeePercent) / 100
 
-  // Calculate KSM values for tip and referral
-  let tipKsm = 0
-  let referralKsm = 0
+  // Calculate token values for tip and referral
+  let tipToken = 0
+  let referralToken = 0
   if (currencyRate) {
-    tipKsm = tipAmount / currencyRate
-    referralKsm = referralFeeAmount / currencyRate
+    tipToken = tipAmount / currencyRate
+    referralToken = referralFeeAmount / currencyRate
   }
 
   return (
@@ -168,27 +171,27 @@ const FundingSummary: FC<{
               <span className="text-base font-semibold text-midnight-koi">Total</span>
             </div>
             <div className="flex flex-col items-end">
-              <span className="text-xl font-bold text-midnight-koi tabular-nums">{ksmValueDisplay}</span>
-              {ksmUnitDisplay && <span className="text-xs text-pine-shadow-60">{ksmUnitDisplay}</span>}
+              <span className="text-xl font-bold text-midnight-koi tabular-nums">{tokenValueDisplay}</span>
+              {tokenUnitDisplay && <span className="text-xs text-pine-shadow-60">{tokenUnitDisplay}</span>}
             </div>
           </div>
         </div>
 
-        {/* KSM Distribution Breakdown */}
+        {/* Token Distribution Breakdown */}
         <div className="mt-2 text-xs text-pine-shadow-60 tabular-nums">
           <div className="text-xs font-medium text-pine-shadow-60 uppercase tracking-wide mb-1">Distributed as:</div>
           <div className="flex justify-between">
             <span>Tip Recipient:</span>
-            <span>{tipKsm.toLocaleString(undefined, { maximumFractionDigits: 4 })} {TOKEN_SYMBOL}</span>
+            <span>{tipToken.toLocaleString(undefined, { maximumFractionDigits: 4 })} {chainConfig.symbol}</span>
           </div>
           <div className="flex justify-between">
             <span>Referral:</span>
-            <span>{referralKsm.toLocaleString(undefined, { maximumFractionDigits: 4 })} {TOKEN_SYMBOL}</span>
+            <span>{referralToken.toLocaleString(undefined, { maximumFractionDigits: 4 })} {chainConfig.symbol}</span>
           </div>
         </div>
 
         <div className="text-right text-xs text-pine-shadow-60 mt-1 tabular-nums">
-          1 {TOKEN_SYMBOL} = {formatCurrency(currencyRate, "USD")}
+          1 {chainConfig.symbol} = {formatCurrency(currencyRate, "USD")}
         </div>
       </div>
     </div>
