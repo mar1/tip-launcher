@@ -19,6 +19,9 @@ export const formSchema = z.object({
   // Beneficiaries
   tipBeneficiary: requiredString,
   referral: optionalAddress,
+
+  // Stablecoin selection (USDC/USDT) - required for DOT, optional for KSM
+  stablecoin: z.enum(["USDC", "USDT"]).optional(),
 })
 
 export const parseNumber = (value: string | number | undefined) => {

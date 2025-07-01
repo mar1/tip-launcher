@@ -45,33 +45,55 @@ export const referendumCreationTx$ = state(
         const selectedChain = selectedChain$.getValue() as ChainType;
         const chainConfig = CHAINS[selectedChain];
 
-        // Convert USD to KSM using the current rate
-        const currencyRate = currencyRate$.getValue(); // USD per KSM
-        const tipAmountKSM = currencyRate ? formData.tipAmount / currencyRate : 0;
-        const tipAmountValue = BigInt(Math.round(tipAmountKSM * Math.pow(10, chainConfig.decimals)));
-
-        // Calculate referral fee in KSM
+        let tipAmountValue = 0n;
         let referralFeeAmount = 0n;
-        if (formData.referralFeePercent && formData.referral) {
-          referralFeeAmount = (tipAmountValue * BigInt(formData.referralFeePercent)) / 100n;
-        }
-        const totalValue = tipAmountValue + referralFeeAmount;
+        let calls = [];
+        let assetId: number | undefined = undefined;
 
-        // Create spend_local call for the main beneficiary
-        const tipCall = typedApi.tx.Treasury.spend_local({
-          amount: tipAmountValue,
-          beneficiary: MultiAddress.Id(formData.tipBeneficiary),
-        });
-
-        let calls = [tipCall];
-
-        // If referral is present, add a spend_local call for the referral
-        if (formData.referralFeePercent && formData.referral) {
-          const referralFeeCall = typedApi.tx.Treasury.spend_local({
-            amount: referralFeeAmount,
-            beneficiary: MultiAddress.Id(formData.referral),
+        if (selectedChain === "DOT" && formData.stablecoin) {
+          // Use USD directly, no conversion
+          const dotConfig = chainConfig as import("@/constants").DotChainConfig;
+          tipAmountValue = BigInt(Math.round(formData.tipAmount * 100)); // Use cents for precision
+          if (formData.referralFeePercent && formData.referral) {
+            referralFeeAmount = (tipAmountValue * BigInt(formData.referralFeePercent)) / 100n;
+          }
+          assetId = dotConfig.assetIds[formData.stablecoin];
+          // Main beneficiary
+          const tipCall = typedApi.tx.Treasury.spend_local({
+            amount: tipAmountValue,
+            beneficiary: MultiAddress.Id(formData.tipBeneficiary),
+            ...(assetId !== undefined ? { assetId } : {}),
           });
-          calls.push(referralFeeCall);
+          calls = [tipCall];
+          // Referral
+          if (formData.referralFeePercent && formData.referral) {
+            const referralFeeCall = typedApi.tx.Treasury.spend_local({
+              amount: referralFeeAmount,
+              beneficiary: MultiAddress.Id(formData.referral),
+              ...(assetId !== undefined ? { assetId } : {}),
+            });
+            calls.push(referralFeeCall);
+          }
+        } else {
+          // KSM logic (existing)
+          const currencyRate = currencyRate$.getValue(); // USD per KSM
+          const tipAmountKSM = currencyRate ? formData.tipAmount / currencyRate : 0;
+          tipAmountValue = BigInt(Math.round(tipAmountKSM * Math.pow(10, chainConfig.decimals)));
+          if (formData.referralFeePercent && formData.referral) {
+            referralFeeAmount = (tipAmountValue * BigInt(formData.referralFeePercent)) / 100n;
+          }
+          const tipCall = typedApi.tx.Treasury.spend_local({
+            amount: tipAmountValue,
+            beneficiary: MultiAddress.Id(formData.tipBeneficiary),
+          });
+          calls = [tipCall];
+          if (formData.referralFeePercent && formData.referral) {
+            const referralFeeCall = typedApi.tx.Treasury.spend_local({
+              amount: referralFeeAmount,
+              beneficiary: MultiAddress.Id(formData.referral),
+            });
+            calls.push(referralFeeCall);
+          }
         }
 
         // Batch the calls
@@ -108,7 +130,7 @@ export const referendumCreationTx$ = state(
             text: "Tip referendum proposal",
             params: {
               tipRecipient: formData.tipBeneficiary,
-              amount: formatToken(totalValue),
+              amount: formatToken(tipAmountValue + referralFeeAmount),
               referral: formData.referral || "None",
               referralFee: formData.referralFeePercent ? `${formData.referralFeePercent}%` : "None",
               track: formData.tipperTrack,

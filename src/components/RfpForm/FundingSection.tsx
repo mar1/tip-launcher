@@ -15,6 +15,8 @@ import { useFormContext } from "react-hook-form"
 import { submissionDeposit, getTrack } from "./data/referendaConstants"
 import { CHAINS } from "@/constants"
 import { selectedChain$ } from "../ChainSelector/chain.state"
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "../ui/select"
+import { STABLECOINS } from "@/constants"
 
 const ALICE_DUMMY = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 
@@ -29,6 +31,7 @@ export const FundingSection: FC<{ control: TipControlType; onTooBigChange?: (isT
   const { setValue, getValues } = useFormContext<FormSchema>()
   const [submissionDepositKSM, setSubmissionDepositKSM] = useState<string | null>(null)
   const [trackDepositKSM, setTrackDepositKSM] = useState<string | null>(null)
+  const stablecoin = useWatch({ control, name: "stablecoin" })
 
   const chainConfig = CHAINS[selectedChain]
 
@@ -40,13 +43,20 @@ export const FundingSection: FC<{ control: TipControlType; onTooBigChange?: (isT
   }, [tipAmount, referralFeePercent])
 
   // Track selection logic (automated) - now chain-specific
-  const tipAmountValue = parseNumber(tipAmount) || 0
-  const tipAmountToken = currencyRate ? tipAmountValue / currencyRate : 0
+  let tipAmountValue = parseNumber(tipAmount) || 0
+  let tipAmountToken = 0
   let autoTrack: "small_tipper" | "big_tipper" = "small_tipper"
-  if (tipAmountToken > chainConfig.smallTipperLimit) autoTrack = "big_tipper"
-  // If tipAmountToken > chainConfig.bigTipperLimit, it's too big, but still default to big_tipper for now
-
-  const isTooBig = tipAmountToken > chainConfig.bigTipperLimit
+  let isTooBig = false
+  if (selectedChain === "DOT") {
+    // Use USD directly, no conversion
+    if (tipAmountValue > 2500) autoTrack = "big_tipper"
+    isTooBig = tipAmountValue > 10000
+  } else {
+    // Existing logic for KSM
+    tipAmountToken = currencyRate ? tipAmountValue / currencyRate : 0
+    if (tipAmountToken > chainConfig.smallTipperLimit) autoTrack = "big_tipper"
+    isTooBig = tipAmountToken > chainConfig.bigTipperLimit
+  }
 
   // Set tipperTrack automatically whenever tipAmountToken changes
   useEffect(() => {
@@ -80,9 +90,40 @@ export const FundingSection: FC<{ control: TipControlType; onTooBigChange?: (isT
     if (onTooBigChange) onTooBigChange(isTooBig)
   }, [isTooBig, onTooBigChange])
 
+  // Preselect USDC for Polkadot if not set
+  useEffect(() => {
+    if (selectedChain === "DOT" && !stablecoin) {
+      setValue("stablecoin", "USDC")
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedChain, stablecoin])
+
   return (
     <div className="poster-card">
       <h3 className="text-3xl font-medium mb-8 text-midnight-koi">Tip Amount</h3>
+      {selectedChain === "DOT" && (
+        <div className="mb-8">
+          <label className="block text-sm font-medium mb-2">Stablecoin</label>
+          <Select
+            value={stablecoin as 'USDC' | 'USDT' | undefined}
+            onValueChange={v => setValue("stablecoin", v as 'USDC' | 'USDT')}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select stablecoin (USDC or USDT)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="USDC">
+                <img src={import.meta.env.BASE_URL + "usdc.svg"} alt="USDC" className="inline-block w-5 h-5 mr-2 align-middle" />
+                USDC
+              </SelectItem>
+              <SelectItem value="USDT">
+                <img src={import.meta.env.BASE_URL + "usdt.svg"} alt="USDT" className="inline-block w-5 h-5 mr-2 align-middle" />
+                USDT
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
         <FormInputField
           control={control}
@@ -133,16 +174,31 @@ const TipCategoryDisplay: FC<{ control: TipControlType }> = ({ control }) => {
   const currencyRate = useStateObservable(currencyRate$)
   const selectedChain = useStateObservable(selectedChain$)
   const chainConfig = CHAINS[selectedChain]
+  const stablecoin = useWatch({ control, name: "stablecoin" })
 
   const tipCategory = useMemo(() => {
     const tipAmountValue = parseNumber(tipAmount) || 0
 
-    if (tipAmountValue === 0 || !currencyRate) {
+    if (tipAmountValue === 0) {
       return null
     }
 
-    const tipAmountToken = tipAmountValue / currencyRate
+    // For Polkadot + stablecoin, use USD thresholds
+    if (selectedChain === "DOT" && stablecoin) {
+      if (tipAmountValue <= 2500) {
+        return { category: "Small Tipper", color: "text-lilypad" }
+      } else if (tipAmountValue <= 10000) {
+        return { category: "Big Tipper", color: "text-sun-bleach" }
+      } else {
+        return { category: "Too big for a tip request", color: "text-tomato-stamp" }
+      }
+    }
 
+    // Default: use token logic
+    if (!currencyRate) {
+      return null
+    }
+    const tipAmountToken = tipAmountValue / currencyRate
     if (tipAmountToken <= chainConfig.smallTipperLimit) {
       return { category: "Small Tipper", color: "text-lilypad" }
     } else if (tipAmountToken <= chainConfig.bigTipperLimit) {
@@ -150,7 +206,7 @@ const TipCategoryDisplay: FC<{ control: TipControlType }> = ({ control }) => {
     } else {
       return { category: "Too big for a tip request", color: "text-tomato-stamp" }
     }
-  }, [tipAmount, currencyRate, chainConfig])
+  }, [tipAmount, currencyRate, chainConfig, selectedChain, stablecoin])
 
   if (!tipCategory) {
     return null
@@ -174,7 +230,7 @@ const TipCategoryDisplay: FC<{ control: TipControlType }> = ({ control }) => {
 const BalanceCheck: FC<{ control: TipControlType; trackDepositKSM: string | null }> = ({ control, trackDepositKSM }) => {
   const tipAmount = useWatch({ control, name: "tipAmount" })
   const referralFeePercent = useWatch({ control, name: "referralFeePercent" })
-
+  const tipperTrack = useWatch({ control, name: "tipperTrack" })
   const currencyRate = useStateObservable(currencyRate$)
   const estimatedCost = useStateObservable(estimatedCost$)
   const selectedAccount = useStateObservable(selectedAccount$)
@@ -197,6 +253,16 @@ const BalanceCheck: FC<{ control: TipControlType; trackDepositKSM: string | null
   }, [tipAmount, referralFeePercent, currencyRate])
 
   const tipAmountValue = parseNumber(tipAmount) || 0
+
+  // Decision deposit override for DOT
+  let decisionDepositDisplay = trackDepositKSM
+  if (selectedChain === "DOT") {
+    if (tipperTrack === "small_tipper") {
+      decisionDepositDisplay = "1 DOT"
+    } else if (tipperTrack === "big_tipper") {
+      decisionDepositDisplay = "10 DOT"
+    }
+  }
 
   const renderSpecificBalanceMessages = () => {
     // This function is only called when tipAmountValue > 0 and estimatedCost is available.
@@ -244,7 +310,7 @@ const BalanceCheck: FC<{ control: TipControlType; trackDepositKSM: string | null
   return (
     <div className="bg-canvas-cream border border-pine-shadow-20 rounded-lg p-6">
       <p className="text-pine-shadow leading-relaxed mb-4">
-        Please note that you'll need a minimum of {trackDepositKSM ?? '...'} {chainConfig.symbol} to submit the tip referendum. (You'll get your deposit back once the referendum ends.)
+        Please note that you'll need a minimum of {decisionDepositDisplay ?? '...'} to submit the tip referendum. (You'll get your deposit back once the referendum ends.)
       </p>
 
       {tipAmountValue > 0 && estimatedCost && renderSpecificBalanceMessages()}

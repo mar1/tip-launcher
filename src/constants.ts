@@ -18,11 +18,13 @@ export const CHAINS = {
     smallTipperLimit: 250, // DOT
     bigTipperLimit: 1000, // DOT
     name: "Polkadot",
-    color: "#E6007A"
+    color: "#E6007A",
+    assetIds: { USDC: 1337, USDT: 1984 } as const,
   }
 } as const
 
 export type ChainType = keyof typeof CHAINS
+export type DotChainConfig = typeof CHAINS.DOT
 
 // Legacy constants for backward compatibility
 export const KRAKEN_SYMBOL_PAIR = CHAINS.KSM.krakenPair
@@ -65,4 +67,9 @@ export const TYPE_SCALE = {
   transitionDuration: "150ms",
   hoverLift: "4px",
 } as const
+
+export const STABLECOINS = {
+  USDC: { symbol: "USDC", assetId: 1337 },
+  USDT: { symbol: "USDT", assetId: 1984 },
+} as const;
 

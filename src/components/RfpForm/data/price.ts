@@ -14,6 +14,11 @@ export const calculatePriceTotals = (formFields: DeepPartialSkipArrayKey<FormSch
   const referralFeeAmount = (tipAmount * referralFeePercent) / 100;
 
   const totalAmount = tipAmount + referralFeeAmount;
+  // If DOT, use USD directly (no conversion)
+  if (formFields.stablecoin && formFields.stablecoin !== undefined) {
+    return { totalAmount, totalAmountToken: totalAmount };
+  }
+  // For KSM, convert to token value
   const totalAmountToken = conversionRate ? totalAmount / conversionRate : null;
 
   return { totalAmount, totalAmountToken };

@@ -112,31 +112,18 @@ const FundingSummary: FC<{
   const selectedChain = useStateObservable(selectedChain$)
   const chainConfig = CHAINS[selectedChain]
   const { totalAmountToken } = calculatePriceTotals(formFields)
+  const stablecoin = formFields.stablecoin
+  const showStablecoin = selectedChain === 'DOT' && stablecoin
 
   useEffect(() => {
     setTipValue(totalAmountToken)
   }, [totalAmountToken])
 
-  const formattedTokenString = formatCurrency(totalAmountToken, chainConfig.symbol, 2)
   let tokenValueDisplay = "Calculating..."
   let tokenUnitDisplay = ""
-
-  if (totalAmountToken != null && formattedTokenString) {
-    const parts = formattedTokenString.split(" ")
-    if (parts.length >= 1) {
-      tokenValueDisplay = parts[0]
-      if (parts.length >= 2) {
-        tokenUnitDisplay = parts[1]
-      } else {
-        const symbolIndex = tokenValueDisplay.indexOf(chainConfig.symbol)
-        if (symbolIndex > -1 && tokenValueDisplay.endsWith(chainConfig.symbol)) {
-          tokenUnitDisplay = chainConfig.symbol
-          tokenValueDisplay = tokenValueDisplay.substring(0, symbolIndex).trim()
-        } else {
-          tokenUnitDisplay = chainConfig.symbol
-        }
-      }
-    }
+  if (totalAmountToken != null) {
+    tokenValueDisplay = totalAmountToken.toLocaleString(undefined, { maximumFractionDigits: 2 })
+    tokenUnitDisplay = showStablecoin ? stablecoin : chainConfig.symbol
   }
 
   // Calculate referral fee amount from percentage
@@ -147,7 +134,10 @@ const FundingSummary: FC<{
   // Calculate token values for tip and referral
   let tipToken = 0
   let referralToken = 0
-  if (currencyRate) {
+  if (showStablecoin) {
+    tipToken = tipAmount
+    referralToken = referralFeeAmount
+  } else if (currencyRate) {
     tipToken = tipAmount / currencyRate
     referralToken = referralFeeAmount / currencyRate
   }
@@ -182,16 +172,18 @@ const FundingSummary: FC<{
           <div className="text-xs font-medium text-pine-shadow-60 uppercase tracking-wide mb-1">Distributed as:</div>
           <div className="flex justify-between">
             <span>Tip Recipient:</span>
-            <span>{tipToken.toLocaleString(undefined, { maximumFractionDigits: 4 })} {chainConfig.symbol}</span>
+            <span>{tipToken.toLocaleString(undefined, { maximumFractionDigits: 4 })} {tokenUnitDisplay}</span>
           </div>
           <div className="flex justify-between">
             <span>Referral:</span>
-            <span>{referralToken.toLocaleString(undefined, { maximumFractionDigits: 4 })} {chainConfig.symbol}</span>
+            <span>{referralToken.toLocaleString(undefined, { maximumFractionDigits: 4 })} {tokenUnitDisplay}</span>
           </div>
         </div>
 
         <div className="text-right text-xs text-pine-shadow-60 mt-1 tabular-nums">
-          1 {chainConfig.symbol} = {formatCurrency(currencyRate, "USD")}
+          {showStablecoin
+            ? `1 ${stablecoin} = 1 USD`
+            : `1 ${chainConfig.symbol} = ${formatCurrency(currencyRate, "USD")}`}
         </div>
       </div>
     </div>
