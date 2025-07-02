@@ -293,6 +293,8 @@ const ResultingMarkdown: FC<{
 }> = ({ control }) => {
   const [identities, setIdentities] = useState<Record<string, string | undefined>>({})
   const formFields = useWatch({ control })
+  const currencyRate = useStateObservable(currencyRate$)
+  const { totalAmountToken } = useMemo(() => calculatePriceTotals(formFields, currencyRate), [formFields, currencyRate])
 
   useEffect(() => {
     const tipBeneficiary = formFields.tipBeneficiary
@@ -310,9 +312,8 @@ const ResultingMarkdown: FC<{
   }, [formFields.tipBeneficiary, formFields.referral])
 
   const markdown = useMemo(() => {
-    const { totalAmountToken } = calculatePriceTotals(formFields)
     return generateMarkdown(formFields, totalAmountToken, identities)
-  }, [formFields, identities])
+  }, [formFields, totalAmountToken, identities])
 
   const copyToClipboard = async () => {
     try {

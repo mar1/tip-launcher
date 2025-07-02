@@ -32,7 +32,9 @@ Total Requested: $${(tipAmount + referralFeeAmount).toLocaleString()}
 
 Tip Amount: $${tipAmount.toLocaleString()} + Referral Fee: $${referralFeeAmount.toLocaleString()} (${referralFeePercent}%)
 
-${totalAmountToken ? Math.round(totalAmountToken).toLocaleString() : "TBD"
+${typeof totalAmountToken === 'number' && !isNaN(totalAmountToken)
+      ? totalAmountToken.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : "TBD"
     } ${TOKEN_SYMBOL} Requested
 
 ## Recipients
