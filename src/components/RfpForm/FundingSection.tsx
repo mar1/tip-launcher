@@ -189,6 +189,12 @@ const BalanceCheck: FC<{ control: TipControlType; trackDepositKSM: string | null
 
   const tipAmountValue = parseNumber(tipAmount) || 0
 
+  // Helper to parse KSM string (e.g., "0,0333") to number
+  function parseKsmAmount(amount: string | null): number {
+    if (!amount) return 0;
+    return parseFloat(amount.replace(',', '.'));
+  }
+
   const renderSpecificBalanceMessages = () => {
     // This function is only called when tipAmountValue > 0 and estimatedCost is available.
     // So, estimatedCost is guaranteed to be non-null here.
@@ -208,10 +214,8 @@ const BalanceCheck: FC<{ control: TipControlType; trackDepositKSM: string | null
       return <div className="text-pine-shadow-60 mt-2 text-sm">Fetching your balance...</div>
     }
 
-    // estimatedCost is confirmed non-null by the calling condition
-    const totalCost = estimatedCost!.deposits + estimatedCost!.fees
-
-    if (currentBalance < totalCost) {
+    const minRequiredKSM = parseKsmAmount(trackDepositKSM);
+    if (currentBalance < minRequiredKSM) {
       return (
         <div className="poster-alert alert-error flex items-center gap-3 mt-2">
           <TriangleAlert size={20} className="shrink-0" />
