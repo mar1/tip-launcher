@@ -4,8 +4,13 @@ import { createSignal } from "@react-rxjs/utils";
 import { state } from "@react-rxjs/core";
 import { currencyRate$ } from "@/services/currencyRate";
 
-export const calculatePriceTotals = (formFields: DeepPartialSkipArrayKey<FormSchema>) => {
-  const conversionRate = currencyRate$.getValue();
+export const calculatePriceTotals = (
+  formFields: DeepPartialSkipArrayKey<FormSchema>,
+  conversionRate?: number | null
+) => {
+  if (typeof conversionRate !== "number" || !conversionRate) {
+    conversionRate = currencyRate$.getValue();
+  }
 
   const tipAmount = parseNumber(formFields.tipAmount) || 0;
   const referralFeePercent = parseNumber(formFields.referralFeePercent) || 0;
